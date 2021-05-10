@@ -22,7 +22,6 @@ def helpMessage() {
 
     CrossMap arguments:
       --target_ref                  Reference genome fasta file for the target genome assembly (e.g. GRCh38)
-      --target_ref2                 Temp
       --chain_file                  Chain file to translate genomic cooridnates from the source assembly to target assembly
 
     Genotype harmonisation & QC:
@@ -107,10 +106,6 @@ Channel
     .ifEmpty { exit 1, "CrossMap.py target reference genome file: ${params.target_ref}" } 
     .into { target_ref_ch; target_ref_ch2 }
 
-Channel
-    .fromPath(params.target_ref2)
-    .ifEmpty { exit 1, "Temp: ${params.target_ref}" } 
-    .set { target_ref_ch2 }
 
 // Header log info
 log.info """=======================================================
@@ -303,7 +298,7 @@ process harmonise_genotypes{
     }
     else {
     """
-    cp $vcf_file harmonised.vcf
+    cp $vcf_file harmonised.vcf.gz
     cp $study_name_tbi harmonised.vcf.tbi
     """
     }
