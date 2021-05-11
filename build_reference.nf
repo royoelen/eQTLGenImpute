@@ -29,6 +29,10 @@ process rename_chromosomes{
 process create_m3vcf{
     container = "quay.io/eqtlcatalogue/minimac3:v2.0.1"
 
+    cpus 1
+    memory '30 GB'
+    time '42h'
+
     publishDir "${params.outdir}/", mode: 'copy', pattern: "*.m3vcf.gz"
 
     input:

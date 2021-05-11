@@ -409,7 +409,7 @@ process eagle_prephasing{
     --numThreads=8
     """
 }
-/* Not implemented, continue from here
+Not implemented, continue from here
 process minimac_imputation{
     publishDir "${params.outdir}/postimpute/", mode: 'copy', pattern: "*.dose.vcf.gz"
  
@@ -422,11 +422,11 @@ process minimac_imputation{
 
     script:
     """
-    minimac4 --refHaps ${chromosome}.1000g.Phase3.v5.With.Parameter.Estimates.m3vcf.gz \
+    minimac4 --refHaps chr${chromosome}.m3vcf.gz \
     --haps ${vcf} \
     --prefix chr_${chromosome} \
     --format GT,DS,GP \
     --noPhoneHome
     """
 }
- */
+
