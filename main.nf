@@ -12,17 +12,17 @@ def helpMessage() {
     The typical command for running the pipeline is as follows:
     nextflow run main.nf -profile eqtl_catalogue -resume\
         --bfile /gpfs/hpc/projects/genomic_references/CEDAR/genotypes/PLINK_100718_1018/CEDAR\
-        --harmonise_genotypes true\
         --output_name CEDAR_GRCh37_genotyped\
         --outdir CEDAR
 
     Mandatory arguments:
       --bfile                       Path to the input unimputed plink bgen files (without extensions bed/bim/fam) 
       --output_name                 Prefix for the output files
+      --chromosome_names            File with chromosome names for hg19 --> GRCh38.
 
     CrossMap arguments:
-      --target_ref                  Reference genome fasta file for the target genome assembly (e.g. GRCh38)
-      --chain_file                  Chain file to translate genomic cooridnates from the source assembly to target assembly
+      --target_ref                  Reference genome fasta file for the target genome assembly (e.g. GRCh38).
+      --chain_file                  Chain file to translate genomic cooridnates from the source assembly to target assembly.
 
     Genotype harmonisation & QC:
       --harmonise_genotypes         Run GenotypeHarmonizer on the raw genotypes to correct flipped/swapped alleles (default: true)
@@ -106,6 +106,11 @@ Channel
     .ifEmpty { exit 1, "CrossMap.py target reference genome file: ${params.target_ref}" } 
     .into { target_ref_ch; target_ref_ch2 }
 
+Channel
+    .fromPath(params.chromosome_names)
+    .ifEmpty { exit 1, "Chromosome names file not found: ${params.chromosome_names}" } 
+    .set { chr_names_file_ch }
+
 
 // Header log info
 log.info """=======================================================
@@ -130,6 +135,7 @@ summary['Eagle reference panel']    = params.eagle_phasing_reference
 summary['Minimac4 reference panel'] = params.minimac_imputation_reference
 summary['CrossMap reference genome'] = params.target_ref
 summary['CrossMap chain file']      = params.chain_file
+summary['Chromosomes names file']   = params.chromosome_names
 summary['Max Memory']               = params.max_memory
 summary['Max CPUs']                 = params.max_cpus
 summary['Max Time']                 = params.max_time
@@ -281,7 +287,6 @@ process harmonise_genotypes{
     set file("harmonised.vcf.gz"), file("harmonised.vcf.gz.tbi") into harmonised_genotypes
 
     script:
-    if (params.harmonise_genotypes) {
     """
     java -jar /usr/bin/GenotypeHarmonizer.jar \
     --input ${study_name_vcf.simpleName} \
@@ -295,13 +300,6 @@ process harmonise_genotypes{
     bgzip harmonised.vcf
     tabix -p vcf harmonised.vcf.gz
     """
-    }
-    else {
-    """
-    cp $vcf_file harmonised.vcf.gz
-    cp $study_name_tbi harmonised.vcf.tbi
-    """
-    }
 }
 
 process vcf_fixref_hg38{
@@ -316,12 +314,17 @@ process vcf_fixref_hg38{
     script:
     """
     gunzip -c ${input_vcf} > harmonised.vcf
-    cat harmonised.vcf | awk '{if(\$0 !~ /^#/) print "chr"\$0; else print \$0}' | sed 's/contig=<ID=/contig=<ID=chr/g' > harmonised_with_chr.vcf
+    #cat harmonised.vcf | awk '{if(\$0 !~ /^#/) print "chr"\$0; else print \$0}' | sed 's/contig=<ID=/contig=<ID=chr/g' > harmonised_with_chr.vcf
+    awk '{if(\$0 !~ /^#/) print "chr"\$0; else print \$0}' harmonised.vcf > harmonised_with_chr.vcf
     bgzip harmonised_with_chr.vcf
 
+    # Add "chr" to fasta files
+    sed 's/>/>chr/g' ${fasta} > fixed_fasta.fa
+
+    # Fixing 
     bcftools index harmonised_with_chr.vcf.gz
-    bcftools +fixref harmonised_with_chr.vcf.gz -- -f ${fasta} -i ${vcf_file} | \
-    bcftools norm --check-ref x -f ${fasta} -Oz -o fixref_hg38.vcf.gz
+    bcftools +fixref harmonised_with_chr.vcf.gz -- -f fixed_fasta.fa -i ${vcf_file} | \
+    bcftools norm --check-ref x -f fixed_fasta.fa -Oz -o fixref_hg38.vcf.gz
     """
 }
 
@@ -409,12 +412,27 @@ process eagle_prephasing{
     --numThreads=8
     """
 }
-Not implemented, continue from here
+
+adjust_chr_format = phased_vcf_cf.combine(chr_names_file_ch)  
+
+process adjust_chr_format{
+    input:
+    set chromosome, file(vcf), file(chromosome_names) from adjust_chr_format
+
+    output:
+    tuple chromosome, file("chr_${chromosome}_fixed.phased.vcf.gz") into phased_vcf_fixed
+
+    script:
+    """
+    bcftools annotate --rename-chrs ${chromosome_names} ${vcf} -Oz -o chr_${chromosome}_fixed.phased.vcf.gz
+    """
+}   
+
 process minimac_imputation{
     publishDir "${params.outdir}/postimpute/", mode: 'copy', pattern: "*.dose.vcf.gz"
  
     input:
-    set chromosome, file(vcf) from phased_vcf_cf
+    set chromosome, file(vcf) from phased_vcf_fixed
     file imputation_reference from imputation_ref_ch.collect()
 
     output:
@@ -422,7 +440,7 @@ process minimac_imputation{
 
     script:
     """
-    minimac4 --refHaps chr${chromosome}.m3vcf.gz \
+    minimac4 --refHaps CCDG_14151_B01_GRM_WGS_2020-08-05_chr${chromosome}.filtered.shapeit2-duohmm-phased.m3vcf.gz \
     --haps ${vcf} \
     --prefix chr_${chromosome} \
     --format GT,DS,GP \
