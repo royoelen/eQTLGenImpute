@@ -17,7 +17,10 @@ nextflow_path=/gpfs/space/GI/GV/Projects/eQTLGenPhase2/tools/
 
 ${nextflow_path}/nextflow run build_reference.nf \
 --vcf_list '/gpfs/space/GI/GV/Projects/eQTLGenPhase2/imputation/scripts/genimpute_hg38/build_ref/vcf_list.tsv' \
---chromosome_names '/gpfs/space/GI/GV/Projects/eQTLGenPhase2/imputation/scripts/genimpute_hg38/build_ref/Hg38ToGRCh38_chromosome_map.tsv' \
+--chromosome_names '/gpfs/space/GI/GV/Projects/eQTLGenPhase2/imputation/scripts/genimpute_hg38/build_ref/Hg38ToGRCh38_chromosome_map.txt' \
+--dbSNP_hg38 '/gpfs/space/GI/GV/Projects/eQTLGenPhase2/imputation/references/hg38/00-All' \
+--fna '/gpfs/space/GI/GV/Projects/eQTLGenPhase2/imputation/data/fasta/GCA_000001405.15_GRCh38_no_alt_analysis_set' \
+--outdir '/gpfs/space/GI/GV/Projects/eQTLGenPhase2/imputation/data/phasing_and_imputation_references/' \
 -with-report MakeReference.html \
 -resume \
 -profile eqtlgen

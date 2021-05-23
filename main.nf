@@ -16,9 +16,8 @@ def helpMessage() {
         --outdir CEDAR
 
     Mandatory arguments:
-      --bfile                       Path to the input unimputed plink bgen files (without extensions bed/bim/fam) 
-      --output_name                 Prefix for the output files
-      --chromosome_names            File with chromosome names for hg19 --> GRCh38.
+      --bfile                       Path to the input unimputed plink bgen files (without extensions bed/bim/fam).
+      --output_name                 Prefix for the output files.
 
     CrossMap arguments:
       --target_ref                  Reference genome fasta file for the target genome assembly (e.g. GRCh38).
@@ -29,6 +28,10 @@ def helpMessage() {
       --ref_panel_hg38              Reference panel used by GenotypeHarmonizer. Ideally should match the reference panel used for imputation (hg38).
       --ref_panel_hg19              Reference panel used for strand fixing. Ideally should match the reference your unimputed data is in (hg19).
       --ref_genome                  Reference genome fasta file for the raw genotypes (typically GRCh37).
+
+    dbSNP annotation:
+    --dbSNP_hg19                    dbSNP vcf for annotating with rs IDs (before LiftOver, in hg19).
+    --dbSNP_hg38                    dbSNP vcf for annotating with rs IDs (after LiftOver, in hg38).
 
     Phasing & Imputation:
       --eagle_genetic_map           Eagle genetic map file
@@ -72,14 +75,14 @@ Channel
     .set { bfile_ch }
 
 Channel
-    .from(params.ref_panel_hg38)
-    .map { ref -> [file("${ref}.vcf.gz"), file("${ref}.vcf.gz.tbi")]}
-    .into { ref_panel_harmonise_genotypes; ref_panel_fix_strands_hg38 }
+    .fromPath(params.ref_panel_hg19)
+    .map { ref -> [file("${ref}.vcf.gz"), file("${ref}.vcf.gz.tbi")] }
+    .into { ref_panel_harmonise_genotypes_hg19; ref_panel_fixref_hg19 }
 
 Channel
-    .from(params.ref_panel_hg19)
-    .map { ref -> [file("${ref}.vcf.gz"), file("${ref}.vcf.gz.tbi")]}
-    .into { ref_panel_fix_strands } 
+    .fromPath(params.ref_panel_hg38)
+    .map { ref -> [file("${ref}.vcf.gz"), file("${ref}.vcf.gz.tbi")] }
+    .into { ref_panel_harmonise_genotypes_hg38; ref_panel_fixref_genotypes_hg38 }
 
 Channel
     .fromPath( "${params.eagle_phasing_reference}*" )
@@ -107,10 +110,16 @@ Channel
     .into { target_ref_ch; target_ref_ch2 }
 
 Channel
-    .fromPath(params.chromosome_names)
-    .ifEmpty { exit 1, "Chromosome names file not found: ${params.chromosome_names}" } 
-    .set { chr_names_file_ch }
+    .fromPath(params.dbSNP_hg19)
+    .map { dbSNP_hg19 -> [file("${dbSNP_hg19}.vcf.gz"), file("${dbSNP_hg19}.vcf.gz.tbi")]}
+    .ifEmpty { exit 1, "dbSNP hg19 file: ${params.dbSNP_hg19}" }
+    .into{dbSNP_hg19_ch; dbSNP_hg19_reffix_ch}
 
+Channel
+    .fromPath(params.dbSNP_hg38)
+    .map { dbSNP_hg38 -> [file("${dbSNP_hg38}.vcf.gz"), file("${dbSNP_hg38}.vcf.gz.tbi")]}
+    .ifEmpty { exit 1, "dbSNP hg38 file: ${params.dbSNP_hg38}" }
+    .into{dbSNP_hg38_ch; dbSNP_hg38_fixref_ch}
 
 // Header log info
 log.info """=======================================================
@@ -128,14 +137,15 @@ summary['Run Name']                 = custom_runName ?: workflow.runName
 summary['PLINK bfile']              = params.bfile
 summary['Reference genome']         = params.ref_genome
 summary['Harmonise genotypes']      = params.harmonise_genotypes
-summary['Harmonisation ref panel']  = params.ref_panel_hg38
-summary['Strand fixing ref panel']  = params.ref_panel_hg19
+summary['Harmonisation ref panel hg19']  = params.ref_panel_hg19
+summary['Harmonisation ref panel hg38']  = params.ref_panel_hg38
 summary['Eagle genetic map']        = params.eagle_genetic_map
 summary['Eagle reference panel']    = params.eagle_phasing_reference
 summary['Minimac4 reference panel'] = params.minimac_imputation_reference
 summary['CrossMap reference genome'] = params.target_ref
 summary['CrossMap chain file']      = params.chain_file
-summary['Chromosomes names file']   = params.chromosome_names
+summary['dbSNP hg19 file']          = params.dbSNP_hg19
+summary['dbSNP hg38 file']          = params.dbSNP_hg38
 summary['Max Memory']               = params.max_memory
 summary['Max CPUs']                 = params.max_cpus
 summary['Max Time']                 = params.max_time
@@ -168,64 +178,97 @@ if( workflow.profile == 'awsbatch') {
   if (!workflow.workDir.startsWith('s3:') || !params.outdir.startsWith('s3:')) exit 1, "Workdir or Outdir not on S3 - specify S3 Buckets for each to run on AWSBatch!"
 }
 
-process plink_to_vcf{
+process harmonise_genotypes_hg19{
+
+    cpus 1
+    memory '30 GB'
+    time '24h'
+
     input:
     set file(study_name_bed), file(study_name_bim), file(study_name_fam) from bfile_ch
+    set file(hg19_ref_vcf_gz), file(hg19_ref_vcf_gz_index) from ref_panel_harmonise_genotypes_hg19.collect()
 
     output:
-    file "raw.vcf" into raw_vcf_ch
+    set file("harmonised.bed"), file("harmonised.bim"), file("harmonised.fam") into harmonised_genotypes_hg19
 
     script:
     """
-    # TODO: check if snps-only just-actg option is acceptable
-    plink2 --bfile ${study_name_bed.simpleName} --recode vcf-iid --chr 1-22 --snps-only no-DI --out raw
+    java -jar /usr/bin/GenotypeHarmonizer.jar \
+    --input ${study_name_bed.simpleName} \
+    --inputType PLINK_BED \
+    --ref ${hg19_ref_vcf_gz} \
+    --refType VCF \
+    --update-id \
+    --output harmonised
     """
 }
 
-/* To consider, if the next step needs rs IDs, herin this step we could add rs IDs from hg19 reference panel 
-process annotate_with_rsID{
+process plink_to_vcf{
     input:
-    set file(study_name_bed), file(study_name_bim), file(study_name_fam) from bfile_ch
+    set file(study_name_bed), file(study_name_bim), file(study_name_fam) from harmonised_genotypes_hg19
 
     output:
-    file "raw.vcf" into raw_vcf_ch
+    file "harmonised_hg19.vcf" into harmonized_hg19_vcf_ch
 
     script:
     """
+    plink2 --bfile ${study_name_bed.simpleName} --recode vcf-iid --chr 1-22 --out harmonised_hg19
+    """
+}
+
+// Use genotypeharmonizer instead
+/*
+process annotate_with_hg19_rsID{
+    input:
+    file(vcf) from raw_vcf_ch
+    set file(dbSnpRefVcf), file(dbSnpRefIndex) from dbSNP_hg19_ch
+
+    output:
+    file "vcf_annotated.vcf.gz" into annotated_vcf_ch
+
+    script:
+    """
+    # Bgzip and tabix
+    bgzip ${vcf}
+    echo "Bgzipped!"
+    tabix -p vcf ${vcf}.gz
+
     # Annotate with dbSNP rs IDs
     bcftools annotate \
     -a ${dbSnpRefVcf} \
     -c ID \
-    -o chr\${chr}_FixedSnpNamesFiltered0005_rsIDs.vcf \
-    ${FilteredVcfToAnnotation}
+    -o vcf_temp.vcf \
+    ${vcf}.gz
 
     echo "rs IDs added!"
 
-    # Bgzip and tabix
-    bgzip chr\${chr}_FixedSnpNamesFiltered0005_rsIDs.vcf
-    echo "Bgzipped!"
-    tabix -p vcf chr\${chr}_FixedSnpNamesFiltered0005_rsIDs.vcf.gz
-    echo "Tabixed!"
+    # remove anything before "rs" in the SNP ID column
+    awk -F'\t' -vOFS='\t' '{ gsub("^.*rs", "rs", \$3) ; print }' vcf_temp.vcf > vcf_annotated.vcf
+    rm vcf_temp.vcf
+
+    bgzip vcf_annotated.vcf
     """
 }
-
 */
 
-// TODO, this is probably unsafe way of fixing reference alleles in hg19 (https://samtools.github.io/bcftools/howtos/plugin.fixref.html), later use Grch37 reference panel instead.
+// Alternative would be to use unsafe way of fixing reference alleles (https://samtools.github.io/bcftools/howtos/plugin.fixref.html)
 process vcf_fixref_hg19{
     input:
-    file input_vcf from raw_vcf_ch
+    file input_vcf from harmonized_hg19_vcf_ch
     file fasta from ref_genome_ch.collect()
-    set file(vcf_file), file(vcf_file_index) from ref_panel_fix_strands.collect()
+    set file(vcf_file), file(vcf_file_index) from ref_panel_fixref_hg19
 
     output:
-    file "fixref.vcf.gz" into crossmap_vcf_input
+    file "fixref_hg19.vcf.gz" into crossmap_vcf_input
 
     script:
     """
     bgzip ${input_vcf}
     bcftools index ${input_vcf}.gz
-    bcftools +fixref ${input_vcf}.gz -Oz -o fixref.vcf.gz -- -d -f ${fasta} -m flip
+    #bcftools +fixref ${input_vcf} -Oz -o fixref.vcf.gz -- -d -f ${fasta} -m flip
+
+    bcftools +fixref ${input_vcf}.gz -- -f ${fasta} -i ${vcf_file} | \
+    bcftools norm --check-ref x -f ${fasta} -Oz -o fixref_hg19.vcf.gz
     """
 }
 
@@ -236,14 +279,14 @@ process crossmap_genotypes{
     file vcf from crossmap_vcf_input
 
     output:
-    file("${vcf.simpleName}_mapped_sorted.vcf") into lifted_vcf
+    set file("${vcf.simpleName}_mapped_sorted.vcf.gz"), file("${vcf.simpleName}_mapped_sorted.vcf.gz.tbi") into lifted_vcf
 
     shell:
     """
-    #Exclude structural variants, beause they break latest version of CrossMap.py
+    # Exclude structural variants, because they break latest version of CrossMap.py
     bcftools view --exclude-types other ${vcf} -Oz -o ${vcf.simpleName}_noSVs.vcf.gz
     
-    #Run CrossMap.py
+    # Run CrossMap.py
     CrossMap.py vcf ${chain_file} ${vcf.simpleName}_noSVs.vcf.gz ${target_ref} ${vcf.simpleName}_mapped.vcf
     
     # This did not work because of the contig order in the header changed after LiftOver
@@ -251,37 +294,24 @@ process crossmap_genotypes{
     grep "^#" ${vcf.simpleName}_mapped.vcf > ${vcf.simpleName}_mapped_sorted.vcf
     grep -v "^#" ${vcf.simpleName}_mapped.vcf | sort -k1,1V -k2,2g >> ${vcf.simpleName}_mapped_sorted.vcf
 
+    bgzip ${vcf.simpleName}_mapped_sorted.vcf
+    tabix -p vcf ${vcf.simpleName}_mapped_sorted.vcf.gz
+
     # TODO: check if the contig order in the header matters for any of the following steps!
 
     """
 }
 
-process fix_chr_format{
+// Use VCF folder instead
+process harmonise_genotypes_hg38{
+
+    cpus 1
+    memory '30 GB'
+    time '24h'
+
     input:
-    file lifted_vcf from lifted_vcf
-
-    output:
-    set file("raw_with_chr.vcf.gz"), file("raw_with_chr.vcf.gz.tbi") into mapped_vcf_ch
-
-    shell:
-    """   
-    # Add "chr" to each chromosome name
-    #awk '{ if(\$0 !~ /^#/ && \$0 !~ /^chr/) \
-    #print "chr"\$0; else if(match(\$0,/(##contig=<ID=)(.*)/,m)) \
-    #print m[1]"chr"m[2]; else print \$0 }'  ${lifted_vcf} > raw_with_chr.vcf
-
-    awk '{if(\$0 !~ /^#/) print "chr"\$0; else print \$0}' ${lifted_vcf} > raw_with_chr.vcf
-
-    bgzip raw_with_chr.vcf
-    #Index the output file
-    tabix -p vcf raw_with_chr.vcf.gz
-    """
-}
-
-process harmonise_genotypes{
-    input:
-    set file(study_name_vcf), file(study_name_tbi) from mapped_vcf_ch
-    set file(vcf_file), file(vcf_file_index) from ref_panel_harmonise_genotypes.collect()
+    set file(study_name_vcf), file(study_name_tbi) from lifted_vcf
+    set file(vcf_file), file(vcf_file_index) from ref_panel_harmonise_genotypes_hg38.collect()
 
     output:
     set file("harmonised.vcf.gz"), file("harmonised.vcf.gz.tbi") into harmonised_genotypes
@@ -291,7 +321,7 @@ process harmonise_genotypes{
     java -jar /usr/bin/GenotypeHarmonizer.jar \
     --input ${study_name_vcf.simpleName} \
     --inputType VCF \
-    --ref ${vcf_file.simpleName} \
+    --ref ${vcf_file} \
     --refType VCF \
     --update-id \
     --output harmonised
@@ -302,29 +332,49 @@ process harmonise_genotypes{
     """
 }
 
+// This should be removed when harmonization reference is already containing rs IDs!
+/*
+process annotate_with_hg38_rsID{
+    input:
+    set file(vcf), file(index) from harmonised_genotypes
+    set file(dbSnpRefVcf), file(dbSnpRefIndex) from  dbSNP_hg38_ch
+
+    output:
+    set file("harmonized_annotated.vcf.gz"), file("harmonized_annotated.vcf.gz.tbi") into hg38annotated_vcf_ch
+
+    script:
+    """
+    # Annotate with dbSNP rs IDs
+    bcftools annotate \
+    -a ${dbSnpRefVcf} \
+    -c ID \
+    -o vcf_annotated.vcf \
+    ${vcf}
+
+    echo "rs IDs added!"
+
+    # Bgzip
+    bgzip harmonized_annotated.vcf
+    echo "Bgzipped!"
+    tabix -p vcf harmonized_annotated.vcf.gz
+    """
+}
+*/
 process vcf_fixref_hg38{
     input:
     set file(input_vcf), file(input_vcf_tbi) from harmonised_genotypes
     file fasta from target_ref_ch2.collect()
-    set file(vcf_file), file(vcf_file_index) from ref_panel_fix_strands_hg38.collect()
+    set file(vcf_file), file(vcf_file_index) from ref_panel_fixref_genotypes_hg38
 
     output:
     file "fixref_hg38.vcf.gz" into fixed_to_filter
 
     script:
     """
-    gunzip -c ${input_vcf} > harmonised.vcf
-    #cat harmonised.vcf | awk '{if(\$0 !~ /^#/) print "chr"\$0; else print \$0}' | sed 's/contig=<ID=/contig=<ID=chr/g' > harmonised_with_chr.vcf
-    awk '{if(\$0 !~ /^#/) print "chr"\$0; else print \$0}' harmonised.vcf > harmonised_with_chr.vcf
-    bgzip harmonised_with_chr.vcf
-
-    # Add "chr" to fasta files
-    sed 's/>/>chr/g' ${fasta} > fixed_fasta.fa
-
     # Fixing 
-    bcftools index harmonised_with_chr.vcf.gz
-    bcftools +fixref harmonised_with_chr.vcf.gz -- -f fixed_fasta.fa -i ${vcf_file} | \
-    bcftools norm --check-ref x -f fixed_fasta.fa -Oz -o fixref_hg38.vcf.gz
+    bcftools index ${input_vcf}
+    bcftools +fixref ${input_vcf} -- -f ${fasta} -i ${vcf_file} | \
+    bcftools norm --check-ref x -f ${fasta} -Oz -o fixref_hg38.vcf.gz
     """
 }
 
@@ -333,7 +383,7 @@ process filter_preimpute_vcf{
         saveAs: {filename -> if (filename == "filtered.vcf.gz") "${params.output_name}_preimpute.vcf.gz" else null }
 
     input:
-    set file(input_vcf), file(input_vcf_tbi) from fixed_to_filter
+    file input_vcf from fixed_to_filter
 
     output:
     set file("filtered.vcf.gz"), file("filtered.vcf.gz.csi") into split_vcf_input, missingness_input
@@ -388,7 +438,7 @@ process split_by_chr{
 
     script:
     """
-    bcftools view -r chr${chr} ${input_vcf} -Oz -o chr_${chr}.vcf.gz
+    bcftools view -r ${chr} ${input_vcf} -Oz -o chr_${chr}.vcf.gz
     """
 }
  
@@ -405,7 +455,7 @@ process eagle_prephasing{
     """
     bcftools index ${vcf}
     eagle --vcfTarget=${vcf} \
-    --vcfRef=CCDG_14151_B01_GRM_WGS_2020-08-05_chr${chromosome}.filtered.shapeit2-duohmm-phased.bcf \
+    --vcfRef=chr${chromosome}.bcf \
     --geneticMapFile=${genetic_map} \
     --chrom=${chromosome} \
     --outPrefix=chr_${chromosome}.phased \
@@ -413,26 +463,11 @@ process eagle_prephasing{
     """
 }
 
-adjust_chr_format = phased_vcf_cf.combine(chr_names_file_ch)  
-
-process adjust_chr_format{
-    input:
-    set chromosome, file(vcf), file(chromosome_names) from adjust_chr_format
-
-    output:
-    tuple chromosome, file("chr_${chromosome}_fixed.phased.vcf.gz") into phased_vcf_fixed
-
-    script:
-    """
-    bcftools annotate --rename-chrs ${chromosome_names} ${vcf} -Oz -o chr_${chromosome}_fixed.phased.vcf.gz
-    """
-}   
-
 process minimac_imputation{
     publishDir "${params.outdir}/postimpute/", mode: 'copy', pattern: "*.dose.vcf.gz"
  
     input:
-    set chromosome, file(vcf) from phased_vcf_fixed
+    set chromosome, file(vcf) from phased_vcf_cf
     file imputation_reference from imputation_ref_ch.collect()
 
     output:
@@ -440,11 +475,10 @@ process minimac_imputation{
 
     script:
     """
-    minimac4 --refHaps CCDG_14151_B01_GRM_WGS_2020-08-05_chr${chromosome}.filtered.shapeit2-duohmm-phased.m3vcf.gz \
+    minimac4 --refHaps chr${chromosome}.m3vcf.gz \
     --haps ${vcf} \
     --prefix chr_${chromosome} \
     --format GT,DS,GP \
     --noPhoneHome
     """
 }
-
