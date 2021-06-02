@@ -10,7 +10,7 @@ def helpMessage() {
     =======================================================
     Usage:
     The typical command for running the pipeline is as follows:
-    nextflow run main.nf -profile eqtl_catalogue -resume\
+    nextflow run main.nf -profile eqtlgen -resume\
         --bfile /gpfs/hpc/projects/genomic_references/CEDAR/genotypes/PLINK_100718_1018/CEDAR\
         --output_name CEDAR_GRCh37_genotyped\
         --outdir CEDAR
@@ -21,31 +21,28 @@ def helpMessage() {
 
     CrossMap arguments:
       --target_ref                  Reference genome fasta file for the target genome assembly (e.g. GRCh38).
-      --chain_file                  Chain file to translate genomic cooridnates from the source assembly to target assembly.
+      --chain_file                  Chain file to translate genomic cooridnates from the source assembly to target assembly (hg19 --> hg38).
 
     Genotype harmonisation & QC:
-      --harmonise_genotypes         Run GenotypeHarmonizer on the raw genotypes to correct flipped/swapped alleles (default: true)
-      --ref_panel_hg38              Reference panel used by GenotypeHarmonizer. Ideally should match the reference panel used for imputation (hg38).
-      --ref_panel_hg19              Reference panel used for strand fixing. Ideally should match the reference your unimputed data is in (hg19).
-      --ref_genome                  Reference genome fasta file for the raw genotypes (typically GRCh37).
-
-    dbSNP annotation:
-    --dbSNP_hg19                    dbSNP vcf for annotating with rs IDs (before LiftOver, in hg19).
-    --dbSNP_hg38                    dbSNP vcf for annotating with rs IDs (after LiftOver, in hg38).
+      --harmonise_genotypes         Run GenotypeHarmonizer on the raw genotypes to correct flipped/swapped alleles (default: true).
+      --ref_genome                  Reference genome fasta file for the raw genotypes (GRCh37).
+      --target_ref2                 Reference genome fasta file for the genotypes after LiftOver to hg38 (GRCh38).
+      --ref_panel_hg19              Reference panel used for strand fixing and GenotypeHarmonizer before LiftOver (GRCh37).
+      --ref_panel_hg38              Reference panel used for strand fixing and GenotypeHarmonizer after LiftOver (GRCh38).
 
     Phasing & Imputation:
       --eagle_genetic_map           Eagle genetic map file
-      --eagle_phasing_reference     Phasing reference panel for Eagle (1000 Genomes Phase 3 high coverage)
-      --minimac_imputation_reference Imputation reference panel for Minimac4 in M3VCF format (1000 Genomes Phase 3 high coverage)
+      --eagle_phasing_reference     Phasing reference panel for Eagle (1000 Genomes 30x WGS high coverage).
+      --minimac_imputation_reference Imputation reference panel for Minimac4 in M3VCF format (1000 Genomes 30x WGS high coverage).
     
     Other options:
-      --outdir                      The output directory where the results will be saved
-      --email                       Set this parameter to your e-mail address to get a summary e-mail with details of the run sent to you when the workflow exits
+      --outdir                      The output directory where the results will be saved.
+      --email                       Set this parameter to your e-mail address to get a summary e-mail with details of the run sent to you when the workflow exits.
       -name                         Name for the pipeline run. If not specified, Nextflow will automatically generate a random mnemonic.
     
     AWSBatch options:
-      --awsqueue                    The AWSBatch JobQueue that needs to be set when running on AWSBatch
-      --awsregion                   The AWS Region for your AWS Batch job to run on
+      --awsqueue                    The AWSBatch JobQueue that needs to be set when running on AWSBatch.
+      --awsregion                   The AWS Region for your AWS Batch job to run on.
     """.stripIndent()
 }
 
@@ -216,42 +213,6 @@ process plink_to_vcf{
     """
 }
 
-// Use genotypeharmonizer instead
-/*
-process annotate_with_hg19_rsID{
-    input:
-    file(vcf) from raw_vcf_ch
-    set file(dbSnpRefVcf), file(dbSnpRefIndex) from dbSNP_hg19_ch
-
-    output:
-    file "vcf_annotated.vcf.gz" into annotated_vcf_ch
-
-    script:
-    """
-    # Bgzip and tabix
-    bgzip ${vcf}
-    echo "Bgzipped!"
-    tabix -p vcf ${vcf}.gz
-
-    # Annotate with dbSNP rs IDs
-    bcftools annotate \
-    -a ${dbSnpRefVcf} \
-    -c ID \
-    -o vcf_temp.vcf \
-    ${vcf}.gz
-
-    echo "rs IDs added!"
-
-    # remove anything before "rs" in the SNP ID column
-    awk -F'\t' -vOFS='\t' '{ gsub("^.*rs", "rs", \$3) ; print }' vcf_temp.vcf > vcf_annotated.vcf
-    rm vcf_temp.vcf
-
-    bgzip vcf_annotated.vcf
-    """
-}
-*/
-
-// Alternative would be to use unsafe way of fixing reference alleles (https://samtools.github.io/bcftools/howtos/plugin.fixref.html)
 process vcf_fixref_hg19{
     input:
     file input_vcf from harmonized_hg19_vcf_ch
@@ -302,7 +263,6 @@ process crossmap_genotypes{
     """
 }
 
-// Use VCF folder instead
 process harmonise_genotypes_hg38{
 
     cpus 1
@@ -332,34 +292,6 @@ process harmonise_genotypes_hg38{
     """
 }
 
-// This should be removed when harmonization reference is already containing rs IDs!
-/*
-process annotate_with_hg38_rsID{
-    input:
-    set file(vcf), file(index) from harmonised_genotypes
-    set file(dbSnpRefVcf), file(dbSnpRefIndex) from  dbSNP_hg38_ch
-
-    output:
-    set file("harmonized_annotated.vcf.gz"), file("harmonized_annotated.vcf.gz.tbi") into hg38annotated_vcf_ch
-
-    script:
-    """
-    # Annotate with dbSNP rs IDs
-    bcftools annotate \
-    -a ${dbSnpRefVcf} \
-    -c ID \
-    -o vcf_annotated.vcf \
-    ${vcf}
-
-    echo "rs IDs added!"
-
-    # Bgzip
-    bgzip harmonized_annotated.vcf
-    echo "Bgzipped!"
-    tabix -p vcf harmonized_annotated.vcf.gz
-    """
-}
-*/
 process vcf_fixref_hg38{
     input:
     set file(input_vcf), file(input_vcf_tbi) from harmonised_genotypes
