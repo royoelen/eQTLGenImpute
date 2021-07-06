@@ -30,11 +30,15 @@ process rename_chromosomes{
     tuple val(chr), file(vcf), file(chromosome_names) from rename_chr_input1
 
     output:
-    tuple val(chr), file("${chr}.renamed.vcf.gz") into renamed_vcf_ch
+    tuple val(chr), file("${chr}.renamed.singletons.removed.vcf.gz") into renamed_vcf_ch
 
     script:
     """
     bcftools annotate --rename-chrs ${params.chromosome_names} ${vcf} -Oz -o ${chr}.renamed.vcf.gz
+
+    # remove singletons and doubletons:
+    bcftools view --no-version -e 'INFO/AC<3 | INFO/AN-INFO/AC<3' ${chr}.renamed.vcf.gz -Oz -o ${chr}.renamed.singletons.removed.vcf.gz
+    
     """
 }
 
@@ -166,7 +170,8 @@ process create_phasing_reference{
     #bcftools index -f ${vcf.simpleName}.bcf
 
     (bcftools view --no-version -h ${vcf}; \
-        bcftools view --no-version -H -c 2 ${vcf}) | \
+    bcftools view --no-version -H -c 2 ${vcf}) | \
+    bcftools view --no-version -e 'INFO/AC<3 | INFO/AN-INFO/AC<3' -Ou |
     bcftools norm --no-version -Ou -m -any | \
     bcftools norm --no-version -Ob -o ${vcf.simpleName}.bcf -d none -f ${fasta} && \
     bcftools index -f ${vcf.simpleName}.bcf
@@ -192,6 +197,6 @@ process create_m3vcf{
 
     script:
     """
-    minimac3 --refHaps ${vcf} --processReference --prefix ${chr}
+    minimac3 --refHaps ${vcf} --processReference --prefix ${chr} --rsid
     """
 }
