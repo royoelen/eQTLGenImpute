@@ -6,7 +6,7 @@ def helpMessage() {
         |\\ | |__  __ /  ` /  \\ |__) |__         }  {
         | \\| |       \\__, \\__/ |  \\ |___     \\`-._,-`-,
                                               `._,._,\'
-     eQTL-Catalogue/genimpute v${workflow.manifest.version}
+     eQTLGenimpute v${workflow.manifest.version}
     =======================================================
     Usage:
     The typical command for running the pipeline is as follows:
@@ -19,16 +19,16 @@ def helpMessage() {
       --bfile                       Path to the input unimputed plink bgen files (without extensions bed/bim/fam).
       --output_name                 Prefix for the output files.
 
+    Genotype harmonisation & QC:
+      --source_ref                  Reference genome fasta file for the raw genotypes (GRCh37).
+      --target_ref                 Reference genome fasta file for the genotypes after LiftOver to hg38 (GRCh38).
+      --ref_panel_hg19              Reference panel used for strand fixing and GenotypeHarmonizer before LiftOver (GRCh37).
+      --ref_panel_hg38              Reference panel used for strand fixing and GenotypeHarmonizer after LiftOver (GRCh38).
+
     CrossMap arguments:
       --target_ref                  Reference genome fasta file for the target genome assembly (e.g. GRCh38).
       --chain_file                  Chain file to translate genomic cooridnates from the source assembly to target assembly (hg19 --> hg38).
 
-    Genotype harmonisation & QC:
-      --harmonise_genotypes         Run GenotypeHarmonizer on the raw genotypes to correct flipped/swapped alleles (default: true).
-      --ref_genome                  Reference genome fasta file for the raw genotypes (GRCh37).
-      --target_ref2                 Reference genome fasta file for the genotypes after LiftOver to hg38 (GRCh38).
-      --ref_panel_hg19              Reference panel used for strand fixing and GenotypeHarmonizer before LiftOver (GRCh37).
-      --ref_panel_hg38              Reference panel used for strand fixing and GenotypeHarmonizer after LiftOver (GRCh38).
 
     Phasing & Imputation:
       --eagle_genetic_map           Eagle genetic map file
@@ -62,9 +62,9 @@ if( !(workflow.runName ==~ /[a-z]+_[a-z]+/) ){
 
 // Define input channels
 Channel
-    .fromPath(params.ref_genome)
-    .ifEmpty { exit 1, "Reference genome fasta file not found: ${params.ref_genome}" } 
-    .set { ref_genome_ch }
+    .fromPath(params.source_ref)
+    .ifEmpty { exit 1, "Reference genome fasta file not found: ${params.source_ref}" } 
+    .set { source_ref_ch }
 
 Channel
     .from(params.bfile)
@@ -216,7 +216,7 @@ process plink_to_vcf{
 process vcf_fixref_hg19{
     input:
     file input_vcf from harmonized_hg19_vcf_ch
-    file fasta from ref_genome_ch.collect()
+    file fasta from source_ref_ch.collect()
     set file(vcf_file), file(vcf_file_index) from ref_panel_fixref_hg19
 
     output:
