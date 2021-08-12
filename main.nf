@@ -6,7 +6,7 @@ def helpMessage() {
         |\\ | |__  __ /  ` /  \\ |__) |__         }  {
         | \\| |       \\__, \\__/ |  \\ |___     \\`-._,-`-,
                                               `._,._,\'
-     eQTL-Catalogue/genimpute v${workflow.manifest.version}
+     eqtlgenimpute v${workflow.manifest.version}
     =======================================================
     Usage:
     The typical command for running the pipeline is as follows:
@@ -25,9 +25,6 @@ def helpMessage() {
 
     Genotype harmonisation & QC:
       --harmonise_genotypes         Run GenotypeHarmonizer on the raw genotypes to correct flipped/swapped alleles (default: true).
-      --ref_genome                  Reference genome fasta file for the raw genotypes (GRCh37).
-      --target_ref2                 Reference genome fasta file for the genotypes after LiftOver to hg38 (GRCh38).
-      --ref_panel_hg19              Reference panel used for strand fixing and GenotypeHarmonizer before LiftOver (GRCh37).
       --ref_panel_hg38              Reference panel used for strand fixing and GenotypeHarmonizer after LiftOver (GRCh38).
 
     Phasing & Imputation:
@@ -61,7 +58,6 @@ if( !(workflow.runName ==~ /[a-z]+_[a-z]+/) ){
 
 
 // Define input channels
-
 Channel
     .from(params.bfile)
     .map { study -> [file("${study}.bed"), file("${study}.bim"), file("${study}.fam")]}
@@ -104,10 +100,10 @@ log.info """=======================================================
     |\\ | |__  __ /  ` /  \\ |__) |__         }  {
     | \\| |       \\__, \\__/ |  \\ |___     \\`-._,-`-,
                                           `._,._,\'
-eQTL-Catalogue/genimpute v${workflow.manifest.version}"
+eqtlgenimpute v${workflow.manifest.version}"
 ======================================================="""
 def summary = [:]
-summary['Pipeline Name']            = 'eQTL-Catalogue/genimpute'
+summary['Pipeline Name']            = 'eqtlgenimpute'
 summary['Pipeline Version']         = workflow.manifest.version
 summary['Run Name']                 = custom_runName ?: workflow.runName
 summary['PLINK bfile']              = params.bfile
@@ -153,14 +149,10 @@ if( workflow.profile == 'awsbatch') {
 
 process crossmap{
 
-    cpus 1
-    memory '30 GB'
-    time '24h'
-
     input:
     set file(study_name_bed), file(study_name_bim), file(study_name_fam) from bfile_ch
     file chain_file from chain_file_ch.collect()
-    
+ 
     output:
     tuple file("crossmapped_plink.bed"), file("crossmapped_plink.bim"), file("crossmapped_plink.fam") into crossmapped
 
@@ -179,14 +171,23 @@ process crossmap{
     """
 }
 
-process harmonize_hg38{
-
-    cpus 1
-    memory '30 GB'
-    time '24h'
-
+process sort_bed{
     input:
     tuple file(study_name_bed), file(study_name_bim), file(study_name_fam) from crossmapped
+
+    output:
+    tuple file("sorted.bed"), file("sorted.bim"), file("sorted.fam") into sorted_genotypes_hg38_ch
+    
+    script:
+    """
+    plink2 --bfile ${study_name_bed.simpleName} --make-bed --output-chr MT --out sorted
+    """
+}
+
+process harmonize_hg38{
+
+    input:
+    tuple file(study_name_bed), file(study_name_bim), file(study_name_fam) from sorted_genotypes_hg38_ch
     tuple file(vcf_file), file(vcf_file_index) from ref_panel_harmonise_genotypes_hg38.collect()
 
     output:
