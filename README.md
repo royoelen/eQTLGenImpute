@@ -23,6 +23,10 @@ Original pipeline was developed:
 * Liina Anette Pärtel
 * Mark-Erik Kodar
 
-Pipeline was adjusted to work with 1000G p3 30X WGS reference panel:
+Original pipeline was adjusted to work with 1000G p3 30X WGS reference panel:
+
+* Ralf Tambets
+
+Original pipelines were adjusted to work with 1000G p3 30X WGS reference panel and for eQTLGen consrortium analyses:
 
 * Urmo Võsa
