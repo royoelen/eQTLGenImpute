@@ -39,7 +39,8 @@ These are organised to the on folder and all you need to do is to download the t
 
 Replace the required paths in the script template.
 
-´´´
+```
+
 #!/bin/bash
 
 #SBATCH --time=72:00:00
@@ -77,7 +78,7 @@ ${nextflow_path}/nextflow run main.nf \
 --profile slurm \
 -resume
 
-´´´
+```
 
 ## Contributors
 
