@@ -11,39 +11,31 @@ def helpMessage() {
     Usage:
     The typical command for running the pipeline is as follows:
     nextflow run main.nf -profile eqtlgen -resume\
-        --bfile \
-        --output_name CEDAR_GRCh37_genotyped\
-        --outdir CEDAR
+        --bfile CohortName_hg37_genotyped\
+        --output_name CohortName_hg38_imputed\
+        --outdir CohortName
 
     Mandatory arguments:
-      --bfile                       Path to the input unimputed plink bgen files (without extensions bed/bim/fam).
+      --bfile                       Path to the input unimputed plink files (without extensions bed/bim/fam, has to be in hg19).
       --output_name                 Prefix for the output files.
-
-    CrossMap arguments:
+      --outdir                      The output directory where the results will be saved.
       --target_ref                  Reference genome fasta file for the target genome assembly (e.g. GRCh38).
-      --chain_file                  Chain file to translate genomic cooridnates from the source assembly to target assembly (hg19 --> hg38).
-
-    Genotype harmonisation & QC:
-      --harmonise_genotypes         Run GenotypeHarmonizer on the raw genotypes to correct flipped/swapped alleles (default: true).
       --ref_panel_hg38              Reference panel used for strand fixing and GenotypeHarmonizer after LiftOver (GRCh38).
-
-    Phasing & Imputation:
-      --eagle_genetic_map           Eagle genetic map file
+      --eagle_genetic_map           Eagle genetic map file.
       --eagle_phasing_reference     Phasing reference panel for Eagle (1000 Genomes 30x WGS high coverage).
       --minimac_imputation_reference Imputation reference panel for Minimac4 in M3VCF format (1000 Genomes 30x WGS high coverage).
-    
+
+    Optional arguments:
+      --chain_file                  Chain file to translate genomic cooridnates from the source assembly to target assembly (hg19 --> hg38). hg19-->hg38 works by default.
+
     Other options:
-      --outdir                      The output directory where the results will be saved.
       --email                       Set this parameter to your e-mail address to get a summary e-mail with details of the run sent to you when the workflow exits.
       -name                         Name for the pipeline run. If not specified, Nextflow will automatically generate a random mnemonic.
-    
-    AWSBatch options:
-      --awsqueue                    The AWSBatch JobQueue that needs to be set when running on AWSBatch.
-      --awsregion                   The AWS Region for your AWS Batch job to run on.
+
     """.stripIndent()
 }
 
-// Show help emssage
+// Show help message
 if (params.help){
     helpMessage()
     exit 0
@@ -136,16 +128,6 @@ if(workflow.profile == 'awsbatch'){
 if(params.email) summary['E-mail Address'] = params.email
 log.info summary.collect { k,v -> "${k.padRight(21)}: $v" }.join("\n")
 log.info "========================================="
-
-
-if( workflow.profile == 'awsbatch') {
-  // AWSBatch sanity checking
-  if (!params.awsqueue || !params.awsregion) exit 1, "Specify correct --awsqueue and --awsregion parameters on AWSBatch!"
-  if (!workflow.workDir.startsWith('s3') || !params.outdir.startsWith('s3')) exit 1, "Specify S3 URLs for workDir and outdir parameters on AWSBatch!"
-  // Check workDir/outdir paths to be S3 buckets if running on AWSBatch
-  // related: https://github.com/nextflow-io/nextflow/issues/813
-  if (!workflow.workDir.startsWith('s3:') || !params.outdir.startsWith('s3:')) exit 1, "Workdir or Outdir not on S3 - specify S3 Buckets for each to run on AWSBatch!"
-}
 
 process crossmap{
 

@@ -7,9 +7,9 @@
 #SBATCH --mail-type=BEGIN
 #SBATCH --mail-type=END
 #SBATCH --mail-type=FAIL
-#SBATCH --mail-user=urmo.vosa@gmail.com
 #SBATCH --job-name="ImputeGenotypes"
 
+# Load required modules
 module load java-1.8.0_40
 module load singularity/3.5.3
 module load squashfs/4.4
@@ -32,5 +32,5 @@ ${nextflow_path}/nextflow run main.nf \
 --minimac_imputation_reference ${reference_path}/hg38/imputation/ \
 --output_name ${output_name} \
 --outdir ${output_path}  \
--profile eqtlgen \
+--profile slurm \
 -resume
