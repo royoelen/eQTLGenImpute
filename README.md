@@ -5,9 +5,10 @@ Genotype imputation and quality control workflow used by the eQTLGen phase II. T
 Performs the following main steps:
 
 **Pre-imputation QC:**
-- Convert the genotypes to the VCF format with [PLINK](https://www.cog-genomics.org/plink/1.9/).
-- Convert raw genotypes to GRCh38 coordinates with CrossMap.py v0.4.1
+- Convert raw genotypes to GRCh38 coordinates with CrossMap.py v0.4.1.
 - Align raw genotypes to the reference panel with [Genotype Harmonizer](https://github.com/molgenis/systemsgenetics/wiki/Genotype-Harmonizer).
+- Convert the genotypes to the VCF format with [PLINK](https://www.cog-genomics.org/plink/1.9/).
+- Fixes alleles to match reference panel with [bcftools +fixref](https://samtools.github.io/bcftools/howtos/plugin.fixref.html).
 - Exclude variants with Hardy-Weinberg p-value < 1e-6, missingness > 0.05 and minor allele frequency < 0.01 with [bcftools](https://samtools.github.io/bcftools/)
 - Calculate individual-level missingness using [vcftools](https://vcftools.github.io/perl_module.html).
 
@@ -19,30 +20,26 @@ Performs the following main steps:
 
 ### Input files
 
-Pipeline expects as an input the folder with unimputed plink bgen files.
+Pipeline expects as an input the folder with unimputed plink bed/bim/fam files which are in hg19.
 
-### Help files
+### Reference files
 
 Pipeline needs several reference files to do data processing, QC, and imputation:
 
-- hg19 .vcf.gz reference for fixing the alleles and harmonizing the data before CrossMap to hg38
 - hg38 .vcf.gz reference for fixing the alleles and harmonizing the data after CrossMap to hg38
-- hg19 reference genome .fasta file
 - hg38 reference genome .fasta file
-- dbSNP hg19 vcf
-- dbSNP hg38 vcf
 - Phasing reference (hg38)
 - Genetic map for phasing
 - Imputation reference
-- CrossMap chain file (comes with the pipeline)
+- CrossMap hg19 --> hg38 chain file (comes with the pipeline)
 
-These are organised to the on folder and all you need to do is to download the zipped file, unzip and change the path in the relevant script template.
+These are organised to the on folder and all you need to do is to download the tar.gz file, unzip and change the path in the relevant script template.
 
 ### Running the imputation command
 
 Replace the required paths in the script template.
 
-´´´{bash}
+´´´
 #!/bin/bash
 
 #SBATCH --time=72:00:00
@@ -52,9 +49,9 @@ Replace the required paths in the script template.
 #SBATCH --mail-type=BEGIN
 #SBATCH --mail-type=END
 #SBATCH --mail-type=FAIL
-#SBATCH --mail-user=[your e-mail address to send notification]
 #SBATCH --job-name="ImputeGenotypes"
 
+# Load required modules
 module load java-1.8.0_40
 module load singularity/3.5.3
 module load squashfs/4.4
@@ -67,27 +64,24 @@ input_path=[full path to your input genotype folder]
 output_name=[name of the output files]
 output_path=[name of the output path]
 
+# Command
 ${nextflow_path}/nextflow run main.nf \
 --bfile ${input_path} \
---source_ref ${reference_path}/hg19/ref_genome_QC/Homo_sapiens.GRCh37.dna.primary_assembly.fa \
---target_ref ${reference_path}/hg38/ref_genome_QC/Homo_sapiens_assembly38.fasta \
---ref_panel_hg19 ${reference_path}/hg19/ref_panel_QC/1000G_GRCh37_variant_information \
+--target_ref ${reference_path}/hg38/ref_genome_QC/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
 --ref_panel_hg38 ${reference_path}/hg38/ref_panel_QC/30x-GRCh38_NoSamplesSorted \
---dbSNP_hg19 ${reference_path}/hg19/SNP_annotation/00-All \
---dbSNP_hg38 ${reference_path}/hg38/SNP_annotation/00-All \
---eagle_genetic_map ${reference_path}/hg38/phasing/genetic_map_hg38_withX.txt.gz \
---eagle_phasing_reference ${reference_path}/hg38/phasing/ \
+--eagle_genetic_map ${reference_path}/hg38/phasing/genetic_map/genetic_map_hg38_withX.txt.gz \
+--eagle_phasing_reference ${reference_path}/hg38/phasing/phasing_reference/ \
 --minimac_imputation_reference ${reference_path}/hg38/imputation/ \
 --output_name ${output_name} \
 --outdir ${output_path}  \
--profile eqtlgen \
+--profile slurm \
 -resume
 
 ´´´
 
 ## Contributors
 
-Original pipeline was developed:
+Original eQTL Catalogue pipeline was developed:
 
 * Kaur Alasoo
 * Liina Anette Pärtel
@@ -97,6 +91,6 @@ Original pipeline was adjusted to work with 1000G p3 30X WGS reference panel:
 
 * Ralf Tambets
 
-Elements of those original pipelines were adjusted to work with 1000G 30X WGS reference panel and accustomised for eQTLGen consortium analyses:
+Elements of those pipelines were adjusted to work with 1000G 30X WGS reference panel and accustomised for eQTLGen consortium analyses:
 
 * Urmo Võsa
