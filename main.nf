@@ -6,47 +6,36 @@ def helpMessage() {
         |\\ | |__  __ /  ` /  \\ |__) |__         }  {
         | \\| |       \\__, \\__/ |  \\ |___     \\`-._,-`-,
                                               `._,._,\'
-     eQTLGenimpute v${workflow.manifest.version}
+     eqtlgenimpute v${workflow.manifest.version}
     =======================================================
     Usage:
     The typical command for running the pipeline is as follows:
     nextflow run main.nf -profile eqtlgen -resume\
-        --bfile /gpfs/hpc/projects/genomic_references/CEDAR/genotypes/PLINK_100718_1018/CEDAR\
-        --output_name CEDAR_GRCh37_genotyped\
-        --outdir CEDAR
+        --bfile CohortName_hg37_genotyped\
+        --output_name CohortName_hg38_imputed\
+        --outdir CohortName
 
     Mandatory arguments:
-      --bfile                       Path to the input unimputed plink bgen files (without extensions bed/bim/fam).
+      --bfile                       Path to the input unimputed plink files (without extensions bed/bim/fam, has to be in hg19).
       --output_name                 Prefix for the output files.
-
-    Genotype harmonisation & QC:
-      --source_ref                  Reference genome fasta file for the raw genotypes (GRCh37).
-      --target_ref                 Reference genome fasta file for the genotypes after LiftOver to hg38 (GRCh38).
-      --ref_panel_hg19              Reference panel used for strand fixing and GenotypeHarmonizer before LiftOver (GRCh37).
-      --ref_panel_hg38              Reference panel used for strand fixing and GenotypeHarmonizer after LiftOver (GRCh38).
-
-    CrossMap arguments:
+      --outdir                      The output directory where the results will be saved.
       --target_ref                  Reference genome fasta file for the target genome assembly (e.g. GRCh38).
-      --chain_file                  Chain file to translate genomic cooridnates from the source assembly to target assembly (hg19 --> hg38).
-
-
-    Phasing & Imputation:
-      --eagle_genetic_map           Eagle genetic map file
+      --ref_panel_hg38              Reference panel used for strand fixing and GenotypeHarmonizer after LiftOver (GRCh38).
+      --eagle_genetic_map           Eagle genetic map file.
       --eagle_phasing_reference     Phasing reference panel for Eagle (1000 Genomes 30x WGS high coverage).
       --minimac_imputation_reference Imputation reference panel for Minimac4 in M3VCF format (1000 Genomes 30x WGS high coverage).
-    
+
+    Optional arguments:
+      --chain_file                  Chain file to translate genomic cooridnates from the source assembly to target assembly (hg19 --> hg38). hg19-->hg38 works by default.
+
     Other options:
-      --outdir                      The output directory where the results will be saved.
       --email                       Set this parameter to your e-mail address to get a summary e-mail with details of the run sent to you when the workflow exits.
       -name                         Name for the pipeline run. If not specified, Nextflow will automatically generate a random mnemonic.
-    
-    AWSBatch options:
-      --awsqueue                    The AWSBatch JobQueue that needs to be set when running on AWSBatch.
-      --awsregion                   The AWS Region for your AWS Batch job to run on.
+
     """.stripIndent()
 }
 
-// Show help emssage
+// Show help message
 if (params.help){
     helpMessage()
     exit 0
@@ -62,19 +51,9 @@ if( !(workflow.runName ==~ /[a-z]+_[a-z]+/) ){
 
 // Define input channels
 Channel
-    .fromPath(params.source_ref)
-    .ifEmpty { exit 1, "Reference genome fasta file not found: ${params.source_ref}" } 
-    .set { source_ref_ch }
-
-Channel
     .from(params.bfile)
     .map { study -> [file("${study}.bed"), file("${study}.bim"), file("${study}.fam")]}
     .set { bfile_ch }
-
-Channel
-    .fromPath(params.ref_panel_hg19)
-    .map { ref -> [file("${ref}.vcf.gz"), file("${ref}.vcf.gz.tbi")] }
-    .into { ref_panel_harmonise_genotypes_hg19; ref_panel_fixref_hg19 }
 
 Channel
     .fromPath(params.ref_panel_hg38)
@@ -106,18 +85,6 @@ Channel
     .ifEmpty { exit 1, "CrossMap.py target reference genome file: ${params.target_ref}" } 
     .into { target_ref_ch; target_ref_ch2 }
 
-Channel
-    .fromPath(params.dbSNP_hg19)
-    .map { dbSNP_hg19 -> [file("${dbSNP_hg19}.vcf.gz"), file("${dbSNP_hg19}.vcf.gz.tbi")]}
-    .ifEmpty { exit 1, "dbSNP hg19 file: ${params.dbSNP_hg19}" }
-    .into{dbSNP_hg19_ch; dbSNP_hg19_reffix_ch}
-
-Channel
-    .fromPath(params.dbSNP_hg38)
-    .map { dbSNP_hg38 -> [file("${dbSNP_hg38}.vcf.gz"), file("${dbSNP_hg38}.vcf.gz.tbi")]}
-    .ifEmpty { exit 1, "dbSNP hg38 file: ${params.dbSNP_hg38}" }
-    .into{dbSNP_hg38_ch; dbSNP_hg38_fixref_ch}
-
 // Header log info
 log.info """=======================================================
                                           ,--./,-.
@@ -125,24 +92,21 @@ log.info """=======================================================
     |\\ | |__  __ /  ` /  \\ |__) |__         }  {
     | \\| |       \\__, \\__/ |  \\ |___     \\`-._,-`-,
                                           `._,._,\'
-eQTL-Catalogue/genimpute v${workflow.manifest.version}"
+eqtlgenimpute v${workflow.manifest.version}"
 ======================================================="""
 def summary = [:]
-summary['Pipeline Name']            = 'eQTL-Catalogue/genimpute'
+summary['Pipeline Name']            = 'eqtlgenimpute'
 summary['Pipeline Version']         = workflow.manifest.version
 summary['Run Name']                 = custom_runName ?: workflow.runName
 summary['PLINK bfile']              = params.bfile
-summary['Reference genome']         = params.ref_genome
 summary['Harmonise genotypes']      = params.harmonise_genotypes
-summary['Harmonisation ref panel hg19']  = params.ref_panel_hg19
+summary['Reference genome hg38']         = params.ref_genome
 summary['Harmonisation ref panel hg38']  = params.ref_panel_hg38
+summary['CrossMap reference genome hg38'] = params.target_ref
+summary['CrossMap chain file']      = params.chain_file
 summary['Eagle genetic map']        = params.eagle_genetic_map
 summary['Eagle reference panel']    = params.eagle_phasing_reference
 summary['Minimac4 reference panel'] = params.minimac_imputation_reference
-summary['CrossMap reference genome'] = params.target_ref
-summary['CrossMap chain file']      = params.chain_file
-summary['dbSNP hg19 file']          = params.dbSNP_hg19
-summary['dbSNP hg38 file']          = params.dbSNP_hg38
 summary['Max Memory']               = params.max_memory
 summary['Max CPUs']                 = params.max_cpus
 summary['Max Time']                 = params.max_time
@@ -165,136 +129,80 @@ if(params.email) summary['E-mail Address'] = params.email
 log.info summary.collect { k,v -> "${k.padRight(21)}: $v" }.join("\n")
 log.info "========================================="
 
-
-if( workflow.profile == 'awsbatch') {
-  // AWSBatch sanity checking
-  if (!params.awsqueue || !params.awsregion) exit 1, "Specify correct --awsqueue and --awsregion parameters on AWSBatch!"
-  if (!workflow.workDir.startsWith('s3') || !params.outdir.startsWith('s3')) exit 1, "Specify S3 URLs for workDir and outdir parameters on AWSBatch!"
-  // Check workDir/outdir paths to be S3 buckets if running on AWSBatch
-  // related: https://github.com/nextflow-io/nextflow/issues/813
-  if (!workflow.workDir.startsWith('s3:') || !params.outdir.startsWith('s3:')) exit 1, "Workdir or Outdir not on S3 - specify S3 Buckets for each to run on AWSBatch!"
-}
-
-process harmonise_genotypes_hg19{
-
-    cpus 1
-    memory '30 GB'
-    time '24h'
+process crossmap{
 
     input:
     set file(study_name_bed), file(study_name_bim), file(study_name_fam) from bfile_ch
-    set file(hg19_ref_vcf_gz), file(hg19_ref_vcf_gz_index) from ref_panel_harmonise_genotypes_hg19.collect()
+    file chain_file from chain_file_ch.collect()
+ 
+    output:
+    tuple file("crossmapped_plink.bed"), file("crossmapped_plink.bim"), file("crossmapped_plink.fam") into crossmapped
+
+    shell: 
+    //Converts BIM to BED and converts the BED file via CrossMap. 
+    //Finds excluded SNPs and removes them from the original plink file. 
+    //Then replaces the BIM with CrossMap's output.
+    """
+    awk '{print \$1,\$4,\$4+1,\$2,\$5,\$6,\$2 "___" \$5 "___" \$6}' ${study_name_bed.simpleName}.bim > crossmap_input.bed
+    CrossMap.py bed ${chain_file} crossmap_input.bed crossmap_output.bed
+    awk '{print \$7}' crossmap_input.bed | sort > input_ids.txt
+    awk '{print \$7}' crossmap_output.bed | sort > output_ids.txt
+    comm -23 input_ids.txt output_ids.txt | awk '{split(\$0,a,"___"); print a[1]}' > excluded_ids.txt
+    plink2 --bfile ${study_name_bed.simpleName} --exclude excluded_ids.txt --make-bed --output-chr MT --out crossmapped_plink
+    awk -F'\t' 'BEGIN {OFS=FS} {print \$1,\$4,0,\$2,\$5,\$6}' crossmap_output.bed > crossmapped_plink.bim
+    """
+}
+
+process sort_bed{
+    input:
+    tuple file(study_name_bed), file(study_name_bim), file(study_name_fam) from crossmapped
 
     output:
-    set file("harmonised.bed"), file("harmonised.bim"), file("harmonised.fam") into harmonised_genotypes_hg19
+    tuple file("sorted.bed"), file("sorted.bim"), file("sorted.fam") into sorted_genotypes_hg38_ch
+    
+    script:
+    """
+    plink2 --bfile ${study_name_bed.simpleName} --make-bed --output-chr MT --out sorted
+    """
+}
+
+process harmonize_hg38{
+
+    input:
+    tuple file(study_name_bed), file(study_name_bim), file(study_name_fam) from sorted_genotypes_hg38_ch
+    tuple file(vcf_file), file(vcf_file_index) from ref_panel_harmonise_genotypes_hg38.collect()
+
+    output:
+    tuple file("harmonised.bed"), file("harmonised.bim"), file("harmonised.fam") into harmonised_genotypes_hg38_ch
 
     script:
     """
-    java -jar /usr/bin/GenotypeHarmonizer.jar \
-    --input ${study_name_bed.simpleName} \
-    --inputType PLINK_BED \
-    --ref ${hg19_ref_vcf_gz} \
-    --refType VCF \
-    --update-id \
-    --output harmonised
+    java -Xmx25g -jar /usr/bin/GenotypeHarmonizer.jar\
+     --input ${study_name_bed.baseName}\
+     --inputType PLINK_BED\
+     --ref ${vcf_file.simpleName}\
+     --refType VCF\
+     --update-id\
+     --output harmonised
     """
 }
 
 process plink_to_vcf{
     input:
-    set file(study_name_bed), file(study_name_bim), file(study_name_fam) from harmonised_genotypes_hg19
+    set file(study_name_bed), file(study_name_bim), file(study_name_fam) from harmonised_genotypes_hg38_ch
 
     output:
-    file "harmonised_hg19.vcf" into harmonized_hg19_vcf_ch
+    file "harmonised_hg38.vcf" into harmonized_hg38_vcf_ch
 
     script:
     """
-    plink2 --bfile ${study_name_bed.simpleName} --recode vcf-iid --chr 1-22 --out harmonised_hg19
-    """
-}
-
-process vcf_fixref_hg19{
-    input:
-    file input_vcf from harmonized_hg19_vcf_ch
-    file fasta from source_ref_ch.collect()
-    set file(vcf_file), file(vcf_file_index) from ref_panel_fixref_hg19
-
-    output:
-    file "fixref_hg19.vcf.gz" into crossmap_vcf_input
-
-    script:
-    """
-    bgzip ${input_vcf}
-    bcftools index ${input_vcf}.gz
-    #bcftools +fixref ${input_vcf} -Oz -o fixref.vcf.gz -- -d -f ${fasta} -m flip
-
-    bcftools +fixref ${input_vcf}.gz -- -f ${fasta} -i ${vcf_file} | \
-    bcftools norm --check-ref x -f ${fasta} -Oz -o fixref_hg19.vcf.gz
-    """
-}
-
-process crossmap_genotypes{
-    input:
-    file chain_file from chain_file_ch.collect()
-    file target_ref from target_ref_ch.collect()
-    file vcf from crossmap_vcf_input
-
-    output:
-    set file("${vcf.simpleName}_mapped_sorted.vcf.gz"), file("${vcf.simpleName}_mapped_sorted.vcf.gz.tbi") into lifted_vcf
-
-    shell:
-    """
-    # Exclude structural variants, because they break latest version of CrossMap.py
-    bcftools view --exclude-types other ${vcf} -Oz -o ${vcf.simpleName}_noSVs.vcf.gz
-    
-    # Run CrossMap.py
-    CrossMap.py vcf ${chain_file} ${vcf.simpleName}_noSVs.vcf.gz ${target_ref} ${vcf.simpleName}_mapped.vcf
-    
-    # This did not work because of the contig order in the header changed after LiftOver
-    #bcftools sort ${vcf.simpleName}_mapped.vcf > ${vcf.simpleName}_mapped_sorted.vcf
-    grep "^#" ${vcf.simpleName}_mapped.vcf > ${vcf.simpleName}_mapped_sorted.vcf
-    grep -v "^#" ${vcf.simpleName}_mapped.vcf | sort -k1,1V -k2,2g >> ${vcf.simpleName}_mapped_sorted.vcf
-
-    bgzip ${vcf.simpleName}_mapped_sorted.vcf
-    tabix -p vcf ${vcf.simpleName}_mapped_sorted.vcf.gz
-
-    # TODO: check if the contig order in the header matters for any of the following steps!
-
-    """
-}
-
-process harmonise_genotypes_hg38{
-
-    cpus 1
-    memory '30 GB'
-    time '24h'
-
-    input:
-    set file(study_name_vcf), file(study_name_tbi) from lifted_vcf
-    set file(vcf_file), file(vcf_file_index) from ref_panel_harmonise_genotypes_hg38.collect()
-
-    output:
-    set file("harmonised.vcf.gz"), file("harmonised.vcf.gz.tbi") into harmonised_genotypes
-
-    script:
-    """
-    java -jar /usr/bin/GenotypeHarmonizer.jar \
-    --input ${study_name_vcf.simpleName} \
-    --inputType VCF \
-    --ref ${vcf_file} \
-    --refType VCF \
-    --update-id \
-    --output harmonised
-
-    plink2 --bfile harmonised --recode vcf-iid --chr 1-22 --snps-only no-DI --out harmonised
-    bgzip harmonised.vcf
-    tabix -p vcf harmonised.vcf.gz
+    plink2 --bfile ${study_name_bed.simpleName} --recode vcf-iid --chr 1-22 --out harmonised_hg38
     """
 }
 
 process vcf_fixref_hg38{
     input:
-    set file(input_vcf), file(input_vcf_tbi) from harmonised_genotypes
+    file input_vcf from harmonized_hg38_vcf_ch
     file fasta from target_ref_ch2.collect()
     set file(vcf_file), file(vcf_file_index) from ref_panel_fixref_genotypes_hg38
 
@@ -303,9 +211,10 @@ process vcf_fixref_hg38{
 
     script:
     """
-    # Fixing 
-    bcftools index ${input_vcf}
-    bcftools +fixref ${input_vcf} -- -f ${fasta} -i ${vcf_file} | \
+    bgzip ${input_vcf}
+    bcftools index ${input_vcf}.gz
+    
+    bcftools +fixref ${input_vcf}.gz -- -f ${fasta} -i ${vcf_file} | \
     bcftools norm --check-ref x -f ${fasta} -Oz -o fixref_hg38.vcf.gz
     """
 }
@@ -381,7 +290,7 @@ process eagle_prephasing{
     file phasing_reference from phasing_ref_ch.collect()
 
     output:
-    tuple chromosome, file("chr_${chromosome}.phased.vcf.gz") into phased_vcf_cf
+    tuple chromosome, file("chr${chromosome}.phased.vcf.gz") into phased_vcf_cf
 
     script:
     """
@@ -390,7 +299,7 @@ process eagle_prephasing{
     --vcfRef=chr${chromosome}.bcf \
     --geneticMapFile=${genetic_map} \
     --chrom=${chromosome} \
-    --outPrefix=chr_${chromosome}.phased \
+    --outPrefix=chr${chromosome}.phased \
     --numThreads=8
     """
 }
@@ -403,13 +312,13 @@ process minimac_imputation{
     file imputation_reference from imputation_ref_ch.collect()
 
     output:
-    tuple chromosome, file("chr_${chromosome}.dose.vcf.gz") into imputed_vcf_cf
+    tuple chromosome, file("chr${chromosome}.dose.vcf.gz") into imputed_vcf_cf
 
     script:
     """
     minimac4 --refHaps chr${chromosome}.m3vcf.gz \
     --haps ${vcf} \
-    --prefix chr_${chromosome} \
+    --prefix chr${chromosome} \
     --format GT,DS,GP \
     --noPhoneHome
     """
