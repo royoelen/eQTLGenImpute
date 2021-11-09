@@ -76,13 +76,8 @@ Channel
     .set { genetic_map_ch }
 
 Channel
-    .fromPath(params.chain_file)
-    .ifEmpty { exit 1, "CrossMap.py chain file not found: ${params.chain_file}" } 
-    .set { chain_file_ch }
-
-Channel
     .fromPath(params.target_ref)
-    .ifEmpty { exit 1, "CrossMap.py target reference genome file: ${params.target_ref}" } 
+    .ifEmpty { exit 1, "Target reference genome file not found: ${params.target_ref}" } 
     .into { target_ref_ch; target_ref_ch2 }
 
 // Header log info
@@ -102,7 +97,7 @@ summary['PLINK bfile']              = params.bfile
 summary['Harmonise genotypes']      = params.harmonise_genotypes
 summary['Reference genome hg38']         = params.ref_genome
 summary['Harmonisation ref panel hg38']  = params.ref_panel_hg38
-summary['CrossMap reference genome hg38'] = params.target_ref
+summary['Target reference genome hg38'] = params.target_ref
 summary['CrossMap chain file']      = params.chain_file
 summary['Eagle genetic map']        = params.eagle_genetic_map
 summary['Eagle reference panel']    = params.eagle_phasing_reference
