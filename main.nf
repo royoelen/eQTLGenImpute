@@ -1,11 +1,6 @@
 def helpMessage() {
     log.info"""
     =======================================================
-                                              ,--./,-.
-              ___     __   __   __   ___     /,-._.--~\'
-        |\\ | |__  __ /  ` /  \\ |__) |__         }  {
-        | \\| |       \\__, \\__/ |  \\ |___     \\`-._,-`-,
-                                              `._,._,\'
      eqtlgenimpute v${workflow.manifest.version}
     =======================================================
     Usage:
@@ -26,7 +21,7 @@ def helpMessage() {
       --minimac_imputation_reference Imputation reference panel for Minimac4 in M3VCF format (1000 Genomes 30x WGS high coverage).
 
     Optional arguments:
-      --chain_file                  Chain file to translate genomic cooridnates from the source assembly to target assembly (hg19 --> hg38). hg19-->hg38 works by default.
+      --chain_file                  Chain file to translate genomic coordinates from the source assembly to target assembly (hg19 --> hg38). hg19-->hg38 works by default.
 
     Other options:
       --email                       Set this parameter to your e-mail address to get a summary e-mail with details of the run sent to you when the workflow exits.
@@ -82,11 +77,6 @@ Channel
 
 // Header log info
 log.info """=======================================================
-                                          ,--./,-.
-          ___     __   __   __   ___     /,-._.--~\'
-    |\\ | |__  __ /  ` /  \\ |__) |__         }  {
-    | \\| |       \\__, \\__/ |  \\ |___     \\`-._,-`-,
-                                          `._,._,\'
 eqtlgenimpute v${workflow.manifest.version}"
 ======================================================="""
 def summary = [:]
@@ -300,7 +290,6 @@ process eagle_prephasing{
 }
 
 process minimac_imputation{
-    publishDir "${params.outdir}/postimpute/", mode: 'copy', pattern: "*.dose.vcf.gz"
  
     input:
     set chromosome, file(vcf) from phased_vcf_cf
@@ -316,5 +305,20 @@ process minimac_imputation{
     --prefix chr${chromosome} \
     --format GT,DS,GP \
     --noPhoneHome
+    """
+}
+
+process filter_maf{
+    publishDir "${params.outdir}/postimpute/", mode: 'copy', pattern: "*.filtered.vcf.gz"
+
+    input:
+    set chromosome, file(vcf) from imputed_vcf_cf
+
+    output:
+    tuple chromosome, file("chr${chromosome}.filtered.vcf.gz") into imputed_vcf_cf
+
+    script:
+    """
+    bcftools filter ${vcf} -i 'MAF[0] > 0.01' -Oz -o chr${chromosome}.filtered.vcf.gz 
     """
 }

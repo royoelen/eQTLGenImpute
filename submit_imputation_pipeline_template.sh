@@ -18,12 +18,12 @@ module load squashfs/4.4
 nextflow_path=[full path to your Nextflow executable]
 reference_path=[full path to your folder with reference files]
 
-input_path=[full path to your input genotype folder]
+input_path=[full path to your input genotype folder + file base name]
 output_name=[name of the output files]
 output_path=[name of the output path]
 
 # Command
-${nextflow_path}/nextflow run main.nf \
+NXF_VER=20.10.0 ${nextflow_path}/nextflow run main.nf \
 --bfile ${input_path} \
 --target_ref ${reference_path}/hg38/ref_genome_QC/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
 --ref_panel_hg38 ${reference_path}/hg38/ref_panel_QC/30x-GRCh38_NoSamplesSorted \
@@ -32,5 +32,5 @@ ${nextflow_path}/nextflow run main.nf \
 --minimac_imputation_reference ${reference_path}/hg38/imputation/ \
 --output_name ${output_name} \
 --outdir ${output_path}  \
---profile slurm \
+-profile slurm \
 -resume

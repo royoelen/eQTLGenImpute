@@ -108,7 +108,6 @@ process make_harmonizing_reference{
 
     script:
     """
-
     sorted_vcfs="chr1_NoSamples.vcf chr2_NoSamples.vcf chr3_NoSamples.vcf chr4_NoSamples.vcf chr5_NoSamples.vcf chr6_NoSamples.vcf chr7_NoSamples.vcf chr8_NoSamples.vcf chr9_NoSamples.vcf \
     chr10_NoSamples.vcf chr11_NoSamples.vcf chr12_NoSamples.vcf chr13_NoSamples.vcf chr14_NoSamples.vcf chr15_NoSamples.vcf chr16_NoSamples.vcf chr17_NoSamples.vcf chr18_NoSamples.vcf chr19_NoSamples.vcf
     chr20_NoSamples.vcf chr21_NoSamples.vcf chr22_NoSamples.vcf"
