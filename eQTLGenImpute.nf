@@ -64,16 +64,19 @@ Channel
     .ifEmpty { exit 1, "Target reference genome file not found: ${params.target_ref}" } 
     .into { target_ref_ch; target_ref_ch2 }
 
+Channel
+    .fromPath(params.chain_file)
+    .ifEmpty { exit 1, "CrossMap.py chain file not found: ${params.chain_file}" } 
+    .set { chain_file_ch }
+
 // Header log info
 log.info """=======================================================
 eqtlgenimpute v${workflow.manifest.version}"
 ======================================================="""
 def summary = [:]
 summary['Pipeline Name']            = 'eqtlgenimpute'
-summary['Pipeline Version']         = workflow.manifest.versions
+summary['Pipeline Version']         = workflow.manifest.version
 summary['PLINK bfile']              = params.bfile
-summary['Harmonise genotypes']      = params.harmonise_genotypes
-summary['Reference genome hg38']         = params.ref_genome
 summary['Harmonisation ref panel hg38']  = params.ref_panel_hg38
 summary['Target reference genome hg38'] = params.target_ref
 summary['CrossMap chain file']      = params.chain_file
