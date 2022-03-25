@@ -70,8 +70,7 @@ eqtlgenimpute v${workflow.manifest.version}"
 ======================================================="""
 def summary = [:]
 summary['Pipeline Name']            = 'eqtlgenimpute'
-summary['Pipeline Version']         = workflow.manifest.version
-summary['Run Name']                 = custom_runName ?: workflow.runName
+summary['Pipeline Version']         = workflow.manifest.versions
 summary['PLINK bfile']              = params.bfile
 summary['Harmonise genotypes']      = params.harmonise_genotypes
 summary['Reference genome hg38']         = params.ref_genome
