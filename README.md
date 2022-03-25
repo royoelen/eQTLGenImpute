@@ -72,7 +72,7 @@ Replace the required paths in the script template.
     --minimac_imputation_reference ${reference_path}/hg38/imputation/ \
     --output_name ${output_name} \
     --outdir ${output_path}  \
-    --profile slurm,singularity \
+    -profile slurm,singularity \
     -resume
 
 ## Contributors

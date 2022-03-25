@@ -33,5 +33,5 @@ NXF_VER=21.10.6 ${nextflow_path}/nextflow run eQTLGenImpute.nf \
 --minimac_imputation_reference ${reference_path}/imputation/ \
 --cohort_name ${cohort_name} \
 --outdir ${output_path}  \
---profile slurm,singularity \
+-profile slurm,singularity \
 -resume
