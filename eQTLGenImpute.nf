@@ -303,7 +303,7 @@ process filter_maf{
     set chromosome, file(vcf) from imputed_vcf_cf
 
     output:
-    tuple chromosome, file("chr${chromosome}.filtered.vcf.gz") into imputed_vcf_cf
+    tuple chromosome, file("chr${chromosome}.filtered.vcf.gz") into imputed_vcf_filtered_cf
 
     script:
     """
