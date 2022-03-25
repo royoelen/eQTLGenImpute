@@ -64,6 +64,8 @@ Channel
     .ifEmpty { exit 1, "Target reference genome file not found: ${params.target_ref}" } 
     .into { target_ref_ch; target_ref_ch2 }
 
+params.chain_file="$baseDir/data/GRCh37_to_GRCh38.chain"
+
 Channel
     .fromPath(params.chain_file)
     .ifEmpty { exit 1, "CrossMap.py chain file not found: ${params.chain_file}" } 
