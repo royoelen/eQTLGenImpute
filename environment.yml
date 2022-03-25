@@ -1,4 +1,4 @@
-name: nf-core-imputation-1.0dev
+name: eqtlgen-imputation
 channels:
   - conda-forge
   - bioconda

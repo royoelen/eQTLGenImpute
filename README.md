@@ -1,6 +1,5 @@
-# eQTLGen/genimpute workflow
+# eQTLGen genotype imputation workflow
 Genotype imputation and quality control workflow used by the eQTLGen phase II. This is modified from the genotype imputation workflow developed by eQTL Catalogue team (https://github.com/eQTL-Catalogue/genimpute).
-
 
 Performs the following main steps:
 
@@ -20,7 +19,7 @@ Performs the following main steps:
 
 ### Input files
 
-Pipeline expects as an input the folder with unimputed plink bed/bim/fam files which are in hg19.
+Pipeline expects as an input the folder with unimputed plink `.bed/.bim/.fam` files which are in hg19. Full path to file name without extension.
 
 ### Reference files
 
@@ -33,7 +32,7 @@ Pipeline needs several reference files to do data processing, QC, and imputation
 - Imputation reference
 - CrossMap hg19 --> hg38 chain file (comes with the pipeline)
 
-These are organised to the on folder and all you need to do is to download the tar.gz file, unzip and change the path in the relevant script template.
+These are organised to the on folder and all you need to do is to download the tar.gz file, unzip, and change the path in the relevant script template.
 
 ### Running the imputation command
 
@@ -64,7 +63,7 @@ Replace the required paths in the script template.
     output_path=[name of the output path]
 
     # Command
-    ${nextflow_path}/nextflow run main.nf \
+    ${nextflow_path}/nextflow run eQTLGenImpute.nf \
     --bfile ${input_path} \
     --target_ref ${reference_path}/hg38/ref_genome_QC/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
     --ref_panel_hg38 ${reference_path}/hg38/ref_panel_QC/30x-GRCh38_NoSamplesSorted \
@@ -73,7 +72,7 @@ Replace the required paths in the script template.
     --minimac_imputation_reference ${reference_path}/hg38/imputation/ \
     --output_name ${output_name} \
     --outdir ${output_path}  \
-    --profile slurm \
+    --profile slurm,singularity \
     -resume
 
 ## Contributors

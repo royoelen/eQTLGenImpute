@@ -5,49 +5,38 @@ def helpMessage() {
     =======================================================
     Usage:
     The typical command for running the pipeline is as follows:
-    nextflow run main.nf -profile eqtlgen -resume\
-        --bfile CohortName_hg37_genotyped\
-        --output_name CohortName_hg38_imputed\
-        --outdir CohortName
+    nextflow run eQTLGenImpute.nf \
+    --bfile CohortName_hg37_genotyped \
+    --cohort_name CohortName_hg38_imputed \
+    --outdir CohortName \
+    --target_ref Homo_sapiens.GRCh38.dna.primary_assembly.fa \
+    --ref_panel_hg38 30x-GRCh38_NoSamplesSorted \
+    --eagle_genetic_map genetic_map_hg38_withX.txt.gz \
+    --eagle_phasing_reference /phasing_reference/ \
+    --minimac_imputation_reference /imputation_reference/ \
+    -profile slurm,singularity \
+    -resume
 
     Mandatory arguments:
-      --bfile                       Path to the input unimputed plink files (without extensions bed/bim/fam, has to be in hg19).
-      --output_name                 Prefix for the output files.
-      --outdir                      The output directory where the results will be saved.
-      --target_ref                  Reference genome fasta file for the target genome assembly (e.g. GRCh38).
-      --ref_panel_hg38              Reference panel used for strand fixing and GenotypeHarmonizer after LiftOver (GRCh38).
-      --eagle_genetic_map           Eagle genetic map file.
-      --eagle_phasing_reference     Phasing reference panel for Eagle (1000 Genomes 30x WGS high coverage).
-      --minimac_imputation_reference Imputation reference panel for Minimac4 in M3VCF format (1000 Genomes 30x WGS high coverage).
+      --bfile                           Path to the input unimputed plink files (without extensions bed/bim/fam, has to be in hg19).
+      --cohort_name                     Prefix for the output files.
+      --outdir                          The output directory where the results will be saved.
+      --target_ref                      Reference genome fasta file for the target genome assembly (e.g. GRCh38).
+      --ref_panel_hg38                  Reference panel used for strand fixing and GenotypeHarmonizer after LiftOver (GRCh38).
+      --eagle_genetic_map               Eagle genetic map file.
+      --eagle_phasing_reference         Phasing reference panel for Eagle (1000 Genomes 30x WGS high coverage).
+      --minimac_imputation_reference    Imputation reference panel for Minimac4 in M3VCF format (1000 Genomes 30x WGS high coverage).
 
     Optional arguments:
-      --chain_file                  Chain file to translate genomic coordinates from the source assembly to target assembly (hg19 --> hg38). hg19-->hg38 works by default.
-
-    Other options:
-      --email                       Set this parameter to your e-mail address to get a summary e-mail with details of the run sent to you when the workflow exits.
-      -name                         Name for the pipeline run. If not specified, Nextflow will automatically generate a random mnemonic.
+      --chain_file                      Chain file to translate genomic coordinates from the source assembly to target assembly (e.g. hg19 --> hg38). hg19-->hg38 works by default.
 
     """.stripIndent()
 }
 
-// Show help message
-if (params.help){
-    helpMessage()
-    exit 0
-}
-
-// Has the run name been specified by the user?
-//  this has the bonus effect of catching both -name and --name
-custom_runName = params.name
-if( !(workflow.runName ==~ /[a-z]+_[a-z]+/) ){
-  custom_runName = workflow.runName
-}
-
-
 // Define input channels
 Channel
     .from(params.bfile)
-    .map { study -> [file("${study}.bed"), file("${study}.bim"), file("${study}.fam")]}
+    .map { study -> ["${study}", file("${study}.bed"), file("${study}.bim"), file("${study}.fam")]}
     .set { bfile_ch }
 
 Channel
@@ -95,7 +84,7 @@ summary['Minimac4 reference panel'] = params.minimac_imputation_reference
 summary['Max Memory']               = params.max_memory
 summary['Max CPUs']                 = params.max_cpus
 summary['Max Time']                 = params.max_time
-summary['Output name']              = params.output_name
+summary['Cohort name']              = params.cohort_name
 summary['Output dir']               = params.outdir
 summary['Working dir']              = workflow.workDir
 summary['Container Engine']         = workflow.containerEngine
@@ -106,18 +95,13 @@ summary['Current path']             = "$PWD"
 summary['Working dir']              = workflow.workDir
 summary['Script dir']               = workflow.projectDir
 summary['Config Profile']           = workflow.profile
-if(workflow.profile == 'awsbatch'){
-   summary['AWS Region']            = params.awsregion
-   summary['AWS Queue']             = params.awsqueue
-}
-if(params.email) summary['E-mail Address'] = params.email
 log.info summary.collect { k,v -> "${k.padRight(21)}: $v" }.join("\n")
 log.info "========================================="
 
 process crossmap{
 
     input:
-    set file(study_name_bed), file(study_name_bim), file(study_name_fam) from bfile_ch
+    set val(simple_name), file(study_name_bed), file(study_name_bim), file(study_name_fam) from bfile_ch
     file chain_file from chain_file_ch.collect()
  
     output:
@@ -128,12 +112,12 @@ process crossmap{
     //Finds excluded SNPs and removes them from the original plink file. 
     //Then replaces the BIM with CrossMap's output.
     """
-    awk '{print \$1,\$4,\$4+1,\$2,\$5,\$6,\$2 "___" \$5 "___" \$6}' ${study_name_bed.simpleName}.bim > crossmap_input.bed
+    awk '{print \$1,\$4,\$4+1,\$2,\$5,\$6,\$2 "___" \$5 "___" \$6}' ${simple_name}.bim > crossmap_input.bed
     CrossMap.py bed ${chain_file} crossmap_input.bed crossmap_output.bed
     awk '{print \$7}' crossmap_input.bed | sort > input_ids.txt
     awk '{print \$7}' crossmap_output.bed | sort > output_ids.txt
     comm -23 input_ids.txt output_ids.txt | awk '{split(\$0,a,"___"); print a[1]}' > excluded_ids.txt
-    plink2 --bfile ${study_name_bed.simpleName} --exclude excluded_ids.txt --make-bed --output-chr MT --out crossmapped_plink
+    plink2 --bfile ${simple_name} --exclude excluded_ids.txt --make-bed --output-chr MT --out crossmapped_plink
     awk -F'\t' 'BEGIN {OFS=FS} {print \$1,\$4,0,\$2,\$5,\$6}' crossmap_output.bed > crossmapped_plink.bim
     """
 }
@@ -206,7 +190,7 @@ process vcf_fixref_hg38{
 
 process filter_preimpute_vcf{
     publishDir "${params.outdir}/preimpute/", mode: 'copy',
-        saveAs: {filename -> if (filename == "filtered.vcf.gz") "${params.output_name}_preimpute.vcf.gz" else null }
+        saveAs: {filename -> if (filename == "filtered.vcf.gz") "${params.cohort_name}_preimpute.vcf.gz" else null }
 
     input:
     file input_vcf from fixed_to_filter
@@ -237,7 +221,7 @@ process filter_preimpute_vcf{
 
 process calculate_missingness{
     publishDir "${params.outdir}/preimpute/", mode: 'copy',
-        saveAs: {filename -> if (filename == "genotypes.imiss") "${params.output_name}.imiss" else null }
+        saveAs: {filename -> if (filename == "genotypes.imiss") "${params.cohort_name}.imiss" else null }
     
     input:
     set file(input_vcf), file(input_vcf_index) from missingness_input 
