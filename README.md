@@ -57,43 +57,43 @@ These are organised to the on folder and all you need to do is to download the t
 
 Go to folder `ConvertVcf2Hdf5` and modify the Slurm script template `submit_GenotypeConversion_pipeline_template.sh` with your input paths. This is an example template using Slurm scheduler.
 
-```
-    #!/bin/bash
+```bash
+#!/bin/bash
 
-    #SBATCH --time=72:00:00
-    #SBATCH -N 1
-    #SBATCH --ntasks-per-node=1
-    #SBATCH --mem=6G
-    #SBATCH --mail-type=BEGIN
-    #SBATCH --mail-type=END
-    #SBATCH --mail-type=FAIL
-    #SBATCH --job-name="ImputeGenotypes"
+#SBATCH --time=72:00:00
+#SBATCH -N 1
+#SBATCH --ntasks-per-node=1
+#SBATCH --mem=6G
+#SBATCH --mail-type=BEGIN
+#SBATCH --mail-type=END
+#SBATCH --mail-type=FAIL
+#SBATCH --job-name="ImputeGenotypes"
 
-    # Load required modules
-    module load java-1.8.0_40
-    module load singularity/3.5.3
-    module load squashfs/4.4
+# Load required modules
+module load java-1.8.0_40
+module load singularity/3.5.3
+module load squashfs/4.4
 
-    # Define paths
-    nextflow_path=[full path to your Nextflow executable]
-    reference_path=[full path to your folder with reference files]
+# Define paths
+nextflow_path=[full path to your Nextflow executable]
+reference_path=[full path to your folder with reference files]
 
-    input_path=[full path to your input genotype folder]
-    output_name=[name of the output files]
-    output_path=[name of the output path]
+input_path=[full path to your input genotype folder]
+output_name=[name of the output files]
+output_path=[name of the output path]
 
-    # Command
-    ${nextflow_path}/nextflow run eQTLGenImpute.nf \
-    --bfile ${input_path} \
-    --target_ref ${reference_path}/ref_genome_QC/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
-    --ref_panel_hg38 ${reference_path}/ref_panel_QC/30x-GRCh38_NoSamplesSorted \
-    --eagle_genetic_map ${reference_path}/phasing/genetic_map/genetic_map_hg38_withX.txt.gz \
-    --eagle_phasing_reference ${reference_path}/phasing/phasing_reference/ \
-    --minimac_imputation_reference ${reference_path}/imputation/ \
-    --output_name ${output_name} \
-    --outdir ${output_path}  \
-    -profile slurm,singularity \
-    -resume
+# Command
+${nextflow_path}/nextflow run eQTLGenImpute.nf \
+--bfile ${input_path} \
+--target_ref ${reference_path}/ref_genome_QC/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
+--ref_panel_hg38 ${reference_path}/ref_panel_QC/30x-GRCh38_NoSamplesSorted \
+--eagle_genetic_map ${reference_path}/phasing/genetic_map/genetic_map_hg38_withX.txt.gz \
+--eagle_phasing_reference ${reference_path}/phasing/phasing_reference/ \
+--minimac_imputation_reference ${reference_path}/imputation/ \
+--output_name ${output_name} \
+--outdir ${output_path}  \
+-profile slurm,singularity \
+-resume
 ```
 
 You can save the modified script version to informative name, e.g. `submit_imputation_pipeline_[**CohortName_PlatformName**].sh`.
