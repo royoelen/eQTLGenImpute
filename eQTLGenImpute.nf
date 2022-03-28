@@ -127,6 +127,7 @@ process crossmap{
 }
 
 process sort_bed{
+
     input:
     tuple file(study_name_bed), file(study_name_bim), file(study_name_fam) from crossmapped
 
@@ -161,6 +162,7 @@ process harmonize_hg38{
 }
 
 process plink_to_vcf{
+
     input:
     set file(study_name_bed), file(study_name_bim), file(study_name_fam) from harmonised_genotypes_hg38_ch
 
@@ -174,6 +176,7 @@ process plink_to_vcf{
 }
 
 process vcf_fixref_hg38{
+
     input:
     file input_vcf from harmonized_hg38_vcf_ch
     file fasta from target_ref_ch2.collect()
@@ -193,6 +196,7 @@ process vcf_fixref_hg38{
 }
 
 process filter_preimpute_vcf{
+
     publishDir "${params.outdir}/preimpute/", mode: 'copy',
         saveAs: {filename -> if (filename == "filtered.vcf.gz") "${params.cohort_name}_preimpute.vcf.gz" else null }
 
@@ -224,6 +228,7 @@ process filter_preimpute_vcf{
 }
 
 process calculate_missingness{
+
     publishDir "${params.outdir}/preimpute/", mode: 'copy',
         saveAs: {filename -> if (filename == "genotypes.imiss") "${params.cohort_name}.imiss" else null }
     
@@ -240,6 +245,7 @@ process calculate_missingness{
 }
 
 process split_by_chr{
+
     publishDir "${params.outdir}/preimpute/split_chr", mode: 'copy',
         saveAs: {filename -> if (filename.indexOf(".vcf.gz") > 0) filename else null }
     
@@ -257,6 +263,7 @@ process split_by_chr{
 }
  
 process eagle_prephasing{
+
     input:
     tuple chromosome, file(vcf) from individual_chromosomes
     file genetic_map from genetic_map_ch.collect()
@@ -297,6 +304,7 @@ process minimac_imputation{
 }
 
 process filter_maf{
+    
     publishDir "${params.outdir}/postimpute/", mode: 'copy', pattern: "*.filtered.vcf.gz"
 
     input:
@@ -309,4 +317,8 @@ process filter_maf{
     """
     bcftools filter ${vcf} -i 'MAF[0] > 0.01' -Oz -o chr${chromosome}.filtered.vcf.gz 
     """
+}
+
+workflow.onComplete {
+    println ( workflow.success ? "Pipeline finished!" : "Something crashed...debug!" )
 }

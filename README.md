@@ -1,10 +1,11 @@
-# eQTLGen genotype imputation workflow
+# eQTLGen genotype imputation pipeline
+
 Genotype imputation and quality control workflow used by the eQTLGen phase II. This is modified from the genotype imputation workflow developed by eQTL Catalogue team (https://github.com/eQTL-Catalogue/genimpute).
 
 Performs the following main steps:
 
-**Pre-imputation QC:**
-- Convert raw genotypes to GRCh38 coordinates with CrossMap.py v0.4.1.
+**Pre-imputation preprocessing and QC:**
+- Convert raw genotypes to GRCh38 coordinates with CrossMap.py v0.4.1 (http://crossmap.sourceforge.net/).
 - Align raw genotypes to the reference panel with [Genotype Harmonizer](https://github.com/molgenis/systemsgenetics/wiki/Genotype-Harmonizer).
 - Convert the genotypes to the VCF format with [PLINK](https://www.cog-genomics.org/plink/1.9/).
 - Fixes alleles to match reference panel with [bcftools +fixref](https://samtools.github.io/bcftools/howtos/plugin.fixref.html).
@@ -17,11 +18,29 @@ Performs the following main steps:
 
 ## Usage information
 
+### Requirements for the system
+
+- Have access to HPC with multiple cores.
+- Have Bash >=3.2 installed.
+- Have Java 8 installed.
+- Have Slurm scheduler managing the jobs in the HPC.
+- HPC has Singularity installed and running.
+
+### Setup of the pipeline
+
+You can either clone it by using git (if available in HPC):
+
+`git clone TBA`
+
+Or just download this from the gitlab/github download link and unzip.
+
 ### Input files
+
+- Input genotype files
 
 Pipeline expects as an input the folder with unimputed plink `.bed/.bim/.fam` files which are in hg19. Full path to file name without extension.
 
-### Reference files
+- Reference files
 
 Pipeline needs several reference files to do data processing, QC, and imputation:
 
@@ -32,12 +51,13 @@ Pipeline needs several reference files to do data processing, QC, and imputation
 - Imputation reference
 - CrossMap hg19 --> hg38 chain file (comes with the pipeline)
 
-These are organised to the on folder and all you need to do is to download the tar.gz file, unzip, and change the path in the relevant script template.
+These are organised to the on folder and all you need to do is to download the tar.gz file, unzip, and change the path in the relevant script template. Download the reference from [here](TODO).
 
 ### Running the imputation command
 
-Replace the required paths in the script template.
+Go to folder `ConvertVcf2Hdf5` and modify the Slurm script template `submit_GenotypeConversion_pipeline_template.sh` with your input paths. This is an example template using Slurm scheduler.
 
+```
     #!/bin/bash
 
     #SBATCH --time=72:00:00
@@ -65,17 +85,38 @@ Replace the required paths in the script template.
     # Command
     ${nextflow_path}/nextflow run eQTLGenImpute.nf \
     --bfile ${input_path} \
-    --target_ref ${reference_path}/hg38/ref_genome_QC/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
-    --ref_panel_hg38 ${reference_path}/hg38/ref_panel_QC/30x-GRCh38_NoSamplesSorted \
-    --eagle_genetic_map ${reference_path}/hg38/phasing/genetic_map/genetic_map_hg38_withX.txt.gz \
-    --eagle_phasing_reference ${reference_path}/hg38/phasing/phasing_reference/ \
-    --minimac_imputation_reference ${reference_path}/hg38/imputation/ \
+    --target_ref ${reference_path}/ref_genome_QC/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
+    --ref_panel_hg38 ${reference_path}/ref_panel_QC/30x-GRCh38_NoSamplesSorted \
+    --eagle_genetic_map ${reference_path}/phasing/genetic_map/genetic_map_hg38_withX.txt.gz \
+    --eagle_phasing_reference ${reference_path}/phasing/phasing_reference/ \
+    --minimac_imputation_reference ${reference_path}/imputation/ \
     --output_name ${output_name} \
     --outdir ${output_path}  \
     -profile slurm,singularity \
     -resume
+```
 
-## Contributors
+You can save the modified script version to informative name, e.g. `submit_imputation_pipeline_[**CohortName_PlatformName**].sh`.
+
+Then submit the job `sbatch submit_imputation_pipeline_[**CohortName_PlatformName**].sh`. This initiates pipeline, makes analysis environment (using singularity or conda) and automatically submits the steps in correct order and parallel way. Separate `work` directory is made to the folder and contains all interim files.
+
+### Monitoring and debugging
+
+- Monitoring:
+  - Monitor the `slurm-***.out` log file and check if all the steps finish without error. Trick: command `watch tail -n 20 slurm-***.out` helps you to interactively monitor the status of the jobs.
+  - Use `squeue -u [YourUserName]` to see if individual tasks are in the queue.
+- If the pipeline crashes (e.g. due to walltime), you can just resubmit the same script after the fixes. Nextflow does not rerun completed steps and continues only from the steps which had not completed.
+- When the work has finished, download and check the job report. This file  is automatically written to your output folder `pipeline_info` subfolder, for potential errors or warnings. E.g. `output/pipeline_info/DataQcReport.html`.
+- When you need to do some debugging, then you can use the last section of aforementioned report to figure out in which subfolder from `work` folder the actual step was run. You can then navigate to this folder and investigate the following hidden files:
+  - `.command.sh`: script which was submitted
+  - `.command.log`: log file for seeing the analysis outputs/errors.
+  - `.command.err`: file which lists the errors, if any.
+  
+### Output
+
+After successful completion of the pipeline, there should be three folders in your `output` path: `preimpute`, `postimpute` and `pipeline_info`. `postimpute` contains imputed genotype data in `.vcf.gz` format, filtered by MAF>0.01. `preimpute` data contains quality-controlled genotype data before imputation: this can be used for secondary purposes (e.g. calculate genotype MDSs) or just deleted. `pipeline_info` contains runlogs from the Nextflow run, useful for debugging.
+
+## Acknowledgements
 
 Original eQTL Catalogue pipeline was developed:
 
@@ -83,10 +124,29 @@ Original eQTL Catalogue pipeline was developed:
 * Liina Anette Pärtel
 * Mark-Erik Kodar
 
-Original pipeline was adjusted to work with 1000G p3 30X WGS reference panel:
+Original pipeline was adjusted to work with 1000G 30X WGS reference panel:
 
 * Ralf Tambets
 
-Elements of those pipelines were adjusted to work with 1000G 30X WGS reference panel and accustomised for eQTLGen consortium analyses:
+Elements of those pipelines were adjusted to work with 1000G 30X WGS reference panel and accustomised for eQTLGen phase II consortium analyses:
 
 * Urmo Võsa
+
+### Citations
+
+[Zhao, H., Sun, Z., Wang, J., Huang, H., Kocher, J. P., &#38; Wang, L. (2014). CrossMap: a versatile tool for coordinate conversion between genome assemblies. Bioinformatics, 30(7), 1006–1007. https://doi.org/10.1093/BIOINFORMATICS/BTT730](https://academic.oup.com/bioinformatics/article/30/7/1006/234947)
+
+[Deelen, P., Bonder, M. J., van der Velde, K. J., Westra, H. J., Winder, E., Hendriksen, D., Franke, L., &#38; Swertz, M. A. (2014). Genotype harmonizer: Automatic strand alignment and format conversion for genotype data integration. BMC Research Notes, 7(1), 901. https://doi.org/10.1186/1756-0500-7-901](https://bmcresnotes.biomedcentral.com/articles/10.1186/1756-0500-7-901)
+
+[Danecek, P., Auton, A., Abecasis, G., Albers, C. A., Banks, E., DePristo, M. A., Handsaker, R. E., Lunter, G., Marth, G. T., Sherry, S. T., McVean, G., &#38; Durbin, R. (2011). The variant call format and VCFtools. Bioinformatics, 27(15), 2156–2158. https://doi.org/10.1093/BIOINFORMATICS/BTR330](https://academic.oup.com/bioinformatics/article/27/15/2156/402296)
+
+[Danecek, P., Bonfield, J. K., Liddle, J., Marshall, J., Ohan, V., Pollard, M. O., Whitwham, A., Keane, T., McCarthy, S. A., Davies, R. M., &#38; Li, H. (2021). Twelve years of SAMtools and BCFtools. GigaScience, 10(2), 1–4. https://doi.org/10.1093/GIGASCIENCE/GIAB008](https://academic.oup.com/gigascience/article/10/2/giab008/6137722)
+
+[Loh, P.-R., Danecek, P., Palamara, P. F., Fuchsberger, C., A Reshef, Y., K Finucane, H., Schoenherr, S., Forer, L., McCarthy, S., Abecasis, G. R., Durbin, R., &#38; L Price, A. (2016). Reference-based phasing using the Haplotype Reference Consortium panel. Nature Genetics, 48(11), 1443–1448. https://doi.org/10.1038/ng.3679](https://www.nature.com/articles/ng.3679)
+
+[Das, S., Forer, L., Schönherr, S., Sidore, C., Locke, A. E., Kwong, A., Vrieze, S. I., Chew, E. Y., Levy, S., McGue, M., Schlessinger, D., Stambolian, D., Loh, P.-R., Iacono, W. G., Swaroop, A., Scott, L. J., Cucca, F., Kronenberg, F., Boehnke, M., … Fuchsberger, C. (2016). Next-generation genotype imputation service and methods. Nature Genetics, 48(10), 1284–1287. https://doi.org/10.1038/ng.3656](https://www.nature.com/articles/ng.3656)
+
+
+### Contacts
+
+For this Nextflow pipeline: urmo.vosa at gmail.com
