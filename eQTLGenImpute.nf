@@ -7,6 +7,7 @@ def helpMessage() {
     The typical command for running the pipeline is as follows:
     nextflow run eQTLGenImpute.nf \
     --bfile CohortName_hg37_genotyped \
+    --gte genotype_to_expression.txt \
     --cohort_name CohortName_hg38_imputed \
     --outdir CohortName \
     --target_ref Homo_sapiens.GRCh38.dna.primary_assembly.fa \
@@ -19,6 +20,7 @@ def helpMessage() {
 
     Mandatory arguments:
       --bfile                           Path to the input unimputed plink files (without extensions bed/bim/fam, has to be in hg19).
+      --gte                             Genotype-to-expression file, tab separated, two columns with genotype and expression IDs. Used to filter in eQTL samples into QC'd genotype data.
       --cohort_name                     Prefix for the output files.
       --outdir                          The output directory where the results will be saved.
       --target_ref                      Reference genome fasta file for the target genome assembly (e.g. GRCh38).
@@ -38,6 +40,11 @@ Channel
     .from(params.bfile)
     .map { study -> ["${study}", file("${study}.bed"), file("${study}.bim"), file("${study}.fam")]}
     .set { bfile_ch }
+
+Channel
+    .from(params.gte)
+    .ifEmpty { exit 1, "Genotype-to-expression file not found: ${params.gte}" }
+    .set { gte_ch }
 
 Channel
     .fromPath(params.ref_panel_hg38)
@@ -303,12 +310,33 @@ process minimac_imputation{
     """
 }
 
+process filter_samples{
+    
+    input:
+    set chromosome, file(vcf) from imputed_vcf_cf
+    file gte from gte_cf
+
+    output:
+    tuple chromosome, file("chr${chromosome}.samplesfiltered.vcf.gz") into imputed_vcf_samplefiltered_cf
+
+    script:
+    """
+    awk -F"\\t" '{print \$1}' ${gte} > sample_filter.txt
+    bcftools view -S sample_filter.txt ${vcf} -Oz -o chr${chromosome}.samplesfiltered.vcf.gz
+
+    # recalculate MAF
+    bcftools annotate -x R2/MAF chr${chromosome}.samplesfiltered.vcf.gz -Oz -o chr${chromosome}.samplesfiltered.vcf.gz
+    bcftools +fill-tags chr${chromosome}.samplesfiltered.vcf.gz -Oz -o chr${chromosome}.samplesfiltered.vcf.gz
+    """
+}
+
+
 process filter_maf{
     
     publishDir "${params.outdir}/postimpute/", mode: 'copy', pattern: "*.filtered.vcf.gz"
 
     input:
-    set chromosome, file(vcf) from imputed_vcf_cf
+    set chromosome, file(vcf) from imputed_vcf_samplefiltered_cf
 
     output:
     tuple chromosome, file("chr${chromosome}.filtered.vcf.gz") into imputed_vcf_filtered_cf
