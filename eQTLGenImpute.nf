@@ -325,7 +325,7 @@ process filter_samples{
     bcftools view -S sample_filter.txt ${vcf} -Oz -o chr${chromosome}.samplesfiltered.vcf.gz
 
     # recalculate MAF
-    bcftools annotate -x R2/MAF chr${chromosome}.samplesfiltered.vcf.gz -Oz -o chr${chromosome}.samplesfiltered.vcf.gz
+    bcftools annotate -x INFO/MAF chr${chromosome}.samplesfiltered.vcf.gz -Oz -o chr${chromosome}.samplesfiltered.vcf.gz
     bcftools +fill-tags chr${chromosome}.samplesfiltered.vcf.gz -Oz -o chr${chromosome}.samplesfiltered.vcf.gz
     """
 }
