@@ -16,13 +16,13 @@ module load singularity/3.5.3
 module load squashfs/4.4
 
 # Define paths
-nextflow_path=../../tools
-reference_path=../hg38
+nextflow_path=../../tools # folder where Nextflow executable is, can be kept as is.
+reference_path=../hg38 # folder where you unpacked the reference files, can be kept as is.
 
 input_path=[full path to your input genotype files, without extensions]
 cohort_name=[name of your cohort]
 gte=[full path to your genotype-to-expression file]
-output_path=../output/
+output_path=../output/ # Output path, can be kept as is.
 
 # Command
 NXF_VER=21.10.6 ${nextflow_path}/nextflow run eQTLGenImpute.nf \
