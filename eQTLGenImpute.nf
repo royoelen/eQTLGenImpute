@@ -7,6 +7,7 @@ def helpMessage() {
     The typical command for running the pipeline is as follows:
     nextflow run eQTLGenImpute.nf \
     --bfile CohortName_hg37_genotyped \
+    --gte genotype_to_expression.txt \
     --cohort_name CohortName_hg38_imputed \
     --outdir CohortName \
     --target_ref Homo_sapiens.GRCh38.dna.primary_assembly.fa \
@@ -19,6 +20,7 @@ def helpMessage() {
 
     Mandatory arguments:
       --bfile                           Path to the input unimputed plink files (without extensions bed/bim/fam, has to be in hg19).
+      --gte                             Genotype-to-expression file, tab separated, two columns with genotype and expression IDs. Used to filter in eQTL samples into QC'd genotype data.
       --cohort_name                     Prefix for the output files.
       --outdir                          The output directory where the results will be saved.
       --target_ref                      Reference genome fasta file for the target genome assembly (e.g. GRCh38).
@@ -38,6 +40,11 @@ Channel
     .from(params.bfile)
     .map { study -> ["${study}", file("${study}.bed"), file("${study}.bim"), file("${study}.fam")]}
     .set { bfile_ch }
+
+Channel
+    .fromPath(params.gte)
+    .ifEmpty { exit 1, "Genotype-to-expression file not found: ${params.gte}" }
+    .set { gte_ch }
 
 Channel
     .fromPath(params.ref_panel_hg38)
@@ -79,6 +86,7 @@ def summary = [:]
 summary['Pipeline Name']            = 'eqtlgenimpute'
 summary['Pipeline Version']         = workflow.manifest.version
 summary['PLINK bfile']              = params.bfile
+summary['Genotype-to-expression']   = params.gte
 summary['Harmonisation ref panel hg38']  = params.ref_panel_hg38
 summary['Target reference genome hg38'] = params.target_ref
 summary['CrossMap chain file']      = params.chain_file
@@ -274,7 +282,7 @@ process eagle_prephasing{
 
     script:
     """
-    bcftools index ${vcf}
+    bcftools index -f ${vcf}
     eagle --vcfTarget=${vcf} \
     --vcfRef=chr${chromosome}.bcf \
     --geneticMapFile=${genetic_map} \
@@ -284,10 +292,28 @@ process eagle_prephasing{
     """
 }
 
+phased_vcf_cf2 = phased_vcf_cf.combine(gte_ch)
+
+process filter_samples{
+    
+    input:
+    set chromosome, file(vcf), file(gte) from phased_vcf_cf2
+
+    output:
+    tuple chromosome, file("chr${chromosome}.phased.samplesfiltered.vcf.gz") into phased_vcf_samplefiltered_cf
+
+    script:
+    """
+    awk -F"\\t" '{print \$1}' ${gte} > sample_filter.txt
+    bcftools view -S sample_filter.txt --force-samples ${vcf} -Oz -o chr${chromosome}.phased.samplesfiltered.vcf.gz
+    """
+}
+
+
 process minimac_imputation{
  
     input:
-    set chromosome, file(vcf) from phased_vcf_cf
+    set chromosome, file(vcf) from phased_vcf_samplefiltered_cf
     file imputation_reference from imputation_ref_ch.collect()
 
     output:

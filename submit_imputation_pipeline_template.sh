@@ -19,8 +19,9 @@ module load squashfs/4.4
 nextflow_path=../../tools
 reference_path=../hg38
 
-input_path=[full path to your input genotype folder]
-cohort_name=[name of the output files]
+input_path=[full path to your input genotype files, without extensions]
+cohort_name=[name of your cohort]
+gte=[full path to your genotype-to-expression file]
 output_path=../output/
 
 # Command
@@ -32,6 +33,7 @@ NXF_VER=21.10.6 ${nextflow_path}/nextflow run eQTLGenImpute.nf \
 --eagle_phasing_reference ${reference_path}/phasing/phasing_reference/ \
 --minimac_imputation_reference ${reference_path}/imputation/ \
 --cohort_name ${cohort_name} \
+--gte ${gte} \
 --outdir ${output_path}  \
 -profile slurm,singularity \
 -resume
