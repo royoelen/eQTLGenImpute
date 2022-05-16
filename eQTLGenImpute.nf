@@ -42,7 +42,7 @@ Channel
     .set { bfile_ch }
 
 Channel
-    .from(params.gte)
+    .fromPath(params.gte)
     .ifEmpty { exit 1, "Genotype-to-expression file not found: ${params.gte}" }
     .set { gte_ch }
 
@@ -86,6 +86,7 @@ def summary = [:]
 summary['Pipeline Name']            = 'eqtlgenimpute'
 summary['Pipeline Version']         = workflow.manifest.version
 summary['PLINK bfile']              = params.bfile
+summary['Genotype-to-expression']   = params.gte
 summary['Harmonisation ref panel hg38']  = params.ref_panel_hg38
 summary['Target reference genome hg38'] = params.target_ref
 summary['CrossMap chain file']      = params.chain_file
@@ -281,7 +282,7 @@ process eagle_prephasing{
 
     script:
     """
-    bcftools index ${vcf}
+    bcftools index -f ${vcf}
     eagle --vcfTarget=${vcf} \
     --vcfRef=chr${chromosome}.bcf \
     --geneticMapFile=${genetic_map} \
@@ -291,10 +292,28 @@ process eagle_prephasing{
     """
 }
 
+phased_vcf_cf2 = phased_vcf_cf.combine(gte_ch)
+
+process filter_samples{
+    
+    input:
+    set chromosome, file(vcf), file(gte) from phased_vcf_cf2
+
+    output:
+    tuple chromosome, file("chr${chromosome}.phased.samplesfiltered.vcf.gz") into phased_vcf_samplefiltered_cf
+
+    script:
+    """
+    awk -F"\\t" '{print \$1}' ${gte} > sample_filter.txt
+    bcftools view -S sample_filter.txt --force-samples ${vcf} -Oz -o chr${chromosome}.phased.samplesfiltered.vcf.gz
+    """
+}
+
+
 process minimac_imputation{
  
     input:
-    set chromosome, file(vcf) from phased_vcf_cf
+    set chromosome, file(vcf) from phased_vcf_samplefiltered_cf
     file imputation_reference from imputation_ref_ch.collect()
 
     output:
@@ -310,33 +329,12 @@ process minimac_imputation{
     """
 }
 
-process filter_samples{
-    
-    input:
-    set chromosome, file(vcf) from imputed_vcf_cf
-    file gte from gte_cf
-
-    output:
-    tuple chromosome, file("chr${chromosome}.samplesfiltered.vcf.gz") into imputed_vcf_samplefiltered_cf
-
-    script:
-    """
-    awk -F"\\t" '{print \$1}' ${gte} > sample_filter.txt
-    bcftools view -S sample_filter.txt ${vcf} -Oz -o chr${chromosome}.samplesfiltered.vcf.gz
-
-    # recalculate MAF
-    bcftools annotate -x INFO/MAF chr${chromosome}.samplesfiltered.vcf.gz -Oz -o chr${chromosome}.samplesfiltered.vcf.gz
-    bcftools +fill-tags chr${chromosome}.samplesfiltered.vcf.gz -Oz -o chr${chromosome}.samplesfiltered.vcf.gz
-    """
-}
-
-
 process filter_maf{
     
     publishDir "${params.outdir}/postimpute/", mode: 'copy', pattern: "*.filtered.vcf.gz"
 
     input:
-    set chromosome, file(vcf) from imputed_vcf_samplefiltered_cf
+    set chromosome, file(vcf) from imputed_vcf_cf
 
     output:
     tuple chromosome, file("chr${chromosome}.filtered.vcf.gz") into imputed_vcf_filtered_cf
