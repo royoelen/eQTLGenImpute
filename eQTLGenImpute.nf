@@ -6,8 +6,7 @@ def helpMessage() {
     Usage:
     The typical command for running the pipeline is as follows:
     nextflow run eQTLGenImpute.nf \
-    --bfile CohortName_hg37_genotyped \
-    --gte genotype_to_expression.txt \
+    --qcdata CohortName_hg37_genotyped \
     --cohort_name CohortName_hg38_imputed \
     --outdir CohortName \
     --target_ref Homo_sapiens.GRCh38.dna.primary_assembly.fa \
@@ -19,8 +18,7 @@ def helpMessage() {
     -resume
 
     Mandatory arguments:
-      --bfile                           Path to the input unimputed plink files (without extensions bed/bim/fam, has to be in hg19).
-      --gte                             Genotype-to-expression file, tab separated, two columns with genotype and expression IDs. Used to filter in eQTL samples into QC'd genotype data.
+      --qcdata                          Path to the folder with input unimputed plink files (have to be in hg19).
       --cohort_name                     Prefix for the output files.
       --outdir                          The output directory where the results will be saved.
       --target_ref                      Reference genome fasta file for the target genome assembly (e.g. GRCh38).
@@ -37,14 +35,14 @@ def helpMessage() {
 
 // Define input channels
 Channel
-    .from(params.bfile)
-    .map { study -> ["${study}", file("${study}.bed"), file("${study}.bim"), file("${study}.fam")]}
+    .fromFilePairs("${params.qcdata}/outputfolder_gen/gen_data_QCd/*.{bed,bim,fam}", size: -1)
+    .ifEmpty {exit 1, "Input genotype files not found!"}
     .set { bfile_ch }
 
 Channel
-    .fromPath(params.gte)
-    .ifEmpty { exit 1, "Genotype-to-expression file not found: ${params.gte}" }
-    .set { gte_ch }
+    .fromPath("${params.qcdata}/outputfolder_exp/exp_data_QCd/exp_data_preprocessed.txt")
+    .ifEmpty { exit 1, "Expression matrix not found: ${params.qcdata}/outputfolder_exp/exp_data_QCd/exp_data_preprocessed.txt" }
+    .set { exp_mat_ch }
 
 Channel
     .fromPath(params.ref_panel_hg38)
@@ -85,8 +83,7 @@ eqtlgenimpute v${workflow.manifest.version}"
 def summary = [:]
 summary['Pipeline Name']            = 'eqtlgenimpute'
 summary['Pipeline Version']         = workflow.manifest.version
-summary['PLINK bfile']              = params.bfile
-summary['Genotype-to-expression']   = params.gte
+summary['Path to QCd input']        = params.qcdata
 summary['Harmonisation ref panel hg38']  = params.ref_panel_hg38
 summary['Target reference genome hg38'] = params.target_ref
 summary['CrossMap chain file']      = params.chain_file
@@ -113,7 +110,7 @@ log.info "========================================="
 process crossmap{
 
     input:
-    set val(simple_name), file(study_name_bed), file(study_name_bim), file(study_name_fam) from bfile_ch
+    set val(study_name), file(study_name_bed), file(study_name_bim), file(study_name_fam) from bfile_ch
     file chain_file from chain_file_ch.collect()
  
     output:
@@ -124,12 +121,12 @@ process crossmap{
     //Finds excluded SNPs and removes them from the original plink file. 
     //Then replaces the BIM with CrossMap's output.
     """
-    awk '{print \$1,\$4,\$4+1,\$2,\$5,\$6,\$2 "___" \$5 "___" \$6}' ${simple_name}.bim > crossmap_input.bed
+    awk '{print \$1,\$4,\$4+1,\$2,\$5,\$6,\$2 "___" \$5 "___" \$6}' ${study_name}.bim > crossmap_input.bed
     CrossMap.py bed ${chain_file} crossmap_input.bed crossmap_output.bed
     awk '{print \$7}' crossmap_input.bed | sort > input_ids.txt
     awk '{print \$7}' crossmap_output.bed | sort > output_ids.txt
     comm -23 input_ids.txt output_ids.txt | awk '{split(\$0,a,"___"); print a[1]}' > excluded_ids.txt
-    plink2 --bfile ${simple_name} --exclude excluded_ids.txt --make-bed --output-chr MT --out crossmapped_plink
+    plink2 --bfile ${study_name} --exclude excluded_ids.txt --make-bed --output-chr MT --out crossmapped_plink
     awk -F'\t' 'BEGIN {OFS=FS} {print \$1,\$4,0,\$2,\$5,\$6}' crossmap_output.bed > crossmapped_plink.bim
     """
 }
@@ -292,19 +289,19 @@ process eagle_prephasing{
     """
 }
 
-phased_vcf_cf2 = phased_vcf_cf.combine(gte_ch)
+phased_vcf_cf2 = phased_vcf_cf.combine(exp_mat_ch)
 
 process filter_samples{
     
     input:
-    set chromosome, file(vcf), file(gte) from phased_vcf_cf2
+    set chromosome, file(vcf), file(exp_mat) from phased_vcf_cf2
 
     output:
     tuple chromosome, file("chr${chromosome}.phased.samplesfiltered.vcf.gz") into phased_vcf_samplefiltered_cf
 
     script:
     """
-    awk -F"\\t" '{print \$1}' ${gte} > sample_filter.txt
+    awk '{print \$1}'  | awk '(NR>1)' ${exp_mat} > sample_filter.txt
     bcftools view -S sample_filter.txt --force-samples ${vcf} -Oz -o chr${chromosome}.phased.samplesfiltered.vcf.gz
     """
 }
