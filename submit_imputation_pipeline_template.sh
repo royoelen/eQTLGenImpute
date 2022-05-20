@@ -15,13 +15,17 @@ module load java-1.8.0_40
 module load singularity/3.5.3
 module load squashfs/4.4
 
-# Define paths
-nextflow_path=../../tools # folder where Nextflow executable is, can be kept as is.
-reference_path=../hg38 # folder where you unpacked the reference files, can be kept as is.
+# If you follow the eQTLGen phase II cookbook and analysis folder structure,
+# some of the following paths are pre-filled.
+# https://github.com/eQTLGen/eQTLGen-phase-2-cookbook/wiki/eQTLGen-phase-II-cookbook
 
-qc_input_folder=../../1_DataQC/output # folder with QCd genotype and expression data, output of DataQC pipeline, can be kept as is.
-cohort_name=[name of your cohort]
-output_path=../output/ # Output path, can be kept as is.
+# Define paths and arguments
+nextflow_path=../../tools # folder where Nextflow executable is.
+reference_path=../hg38 # folder where you unpacked the reference files.
+
+cohortname=[name of your cohort]
+qc_input_folder=../../1_DataQC/output # folder with QCd genotype and expression data, output of DataQC pipeline.
+output_path=../output/ # Output path.
 
 # Command
 NXF_VER=21.10.6 ${nextflow_path}/nextflow run eQTLGenImpute.nf \
@@ -31,7 +35,7 @@ NXF_VER=21.10.6 ${nextflow_path}/nextflow run eQTLGenImpute.nf \
 --eagle_genetic_map ${reference_path}/phasing/genetic_map/genetic_map_hg38_withX.txt.gz \
 --eagle_phasing_reference ${reference_path}/phasing/phasing_reference/ \
 --minimac_imputation_reference ${reference_path}/imputation/ \
---cohort_name ${cohort_name} \
+--cohort_name ${cohortname} \
 --outdir ${output_path}  \
 -profile slurm,singularity \
 -resume

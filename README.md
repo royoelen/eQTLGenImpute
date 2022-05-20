@@ -22,7 +22,7 @@ Performs the following main steps:
 
 - Have access to HPC with multiple cores.
 - Have Bash >=3.2 installed.
-- Have Java 8 installed.
+- Have Java >=8 installed.
 - Have Slurm scheduler managing the jobs in the HPC.
 - HPC has Singularity installed and running.
 
@@ -55,7 +55,7 @@ These are organised to the on folder and all you need to do is to download the t
 
 ### Running the imputation command
 
-Go to folder `ConvertVcf2Hdf5` and modify the Slurm script template `submit_GenotypeConversion_pipeline_template.sh` with your input paths. This is an example template using Slurm scheduler.
+Go to folder `ConvertVcf2Hdf5` and modify the Slurm script template `submit_GenotypeConversion_pipeline_template.sh` with your input paths. Some of the paths are pre-filled, assuming that you follow [eQTLGen phase II cookbook](https://github.com/eQTLGen/eQTLGen-phase-2-cookbook/wiki/eQTLGen-phase-II-cookbook) and its recommended folder structure, however you can also use custom paths.
 
 ```bash
 #!/bin/bash
@@ -75,25 +75,27 @@ module load java-1.8.0_40
 module load singularity/3.5.3
 module load squashfs/4.4
 
-# Define paths
-nextflow_path=../../tools # folder where Nextflow executable is, can be kept as is.
-reference_path=../hg38 # folder where you unpacked the reference files, can be kept as is.
+# If you follow the eQTLGen phase II cookbook and analysis folder structure,
+# some of the following paths are pre-filled.
+# https://github.com/eQTLGen/eQTLGen-phase-2-cookbook/wiki/eQTLGen-phase-II-cookbook
 
-input_path=[full path to your input genotype files, without extensions]
-cohort_name=[name of your cohort]
-gte=[full path to your genotype-to-expression file]
-output_path=../output/ # Output path, can be kept as is.
+# Define paths and arguments
+nextflow_path=../../tools # folder where Nextflow executable is.
+reference_path=../hg38 # folder where you unpacked the reference files.
+
+cohortname=[name of your cohort]
+qc_input_folder=../../1_DataQC/output # folder with QCd genotype and expression data, output of DataQC pipeline.
+output_path=../output/ # Output path.
 
 # Command
 NXF_VER=21.10.6 ${nextflow_path}/nextflow run eQTLGenImpute.nf \
---bfile ${input_path} \
+--qcdata ${qc_input_folder} \
 --target_ref ${reference_path}/ref_genome_QC/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
 --ref_panel_hg38 ${reference_path}/ref_panel_QC/30x-GRCh38_NoSamplesSorted \
 --eagle_genetic_map ${reference_path}/phasing/genetic_map/genetic_map_hg38_withX.txt.gz \
 --eagle_phasing_reference ${reference_path}/phasing/phasing_reference/ \
 --minimac_imputation_reference ${reference_path}/imputation/ \
---cohort_name ${cohort_name} \
---gte ${gte} \
+--cohort_name ${cohortname} \
 --outdir ${output_path}  \
 -profile slurm,singularity \
 -resume
