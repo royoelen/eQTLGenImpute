@@ -301,7 +301,7 @@ process filter_samples{
 
     script:
     """
-    awk '{print \$1}'  | awk '(NR>1)' ${exp_mat} > sample_filter.txt
+    awk '{print \$1}' ${exp_mat} | awk '(NR>1)' > sample_filter.txt
     bcftools view -S sample_filter.txt --force-samples ${vcf} -Oz -o chr${chromosome}.phased.samplesfiltered.vcf.gz
     """
 }
