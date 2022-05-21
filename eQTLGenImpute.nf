@@ -328,7 +328,7 @@ process minimac_imputation{
 
 process filter_maf{
     
-    publishDir "${params.outdir}/postimpute/", mode: 'copy', pattern: "*.filtered.vcf.gz"
+    publishDir "${params.outdir}/postimpute/", mode: 'copy', pattern: "*.filtered.vcf.gz", overwrite: true
 
     input:
     set chromosome, file(vcf) from imputed_vcf_cf
