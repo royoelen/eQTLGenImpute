@@ -23,7 +23,7 @@ module load squashfs/4.4
 nextflow_path=../../tools # folder where Nextflow executable is.
 reference_path=../hg38 # folder where you unpacked the reference files.
 
-cohortname=[name of your cohort]
+cohort_name=[name of your cohort]
 qc_input_folder=../../1_DataQC/output/postimpute/ # folder with QCd genotype and expression data, output of DataQC pipeline.
 output_path=../output/ # Output path.
 

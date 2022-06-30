@@ -320,6 +320,7 @@ process minimac_imputation{
     """
     minimac4 --refHaps chr${chromosome}.m3vcf.gz \
     --haps ${vcf} \
+    --rsid \
     --prefix chr${chromosome} \
     --format GT,DS,GP \
     --noPhoneHome
