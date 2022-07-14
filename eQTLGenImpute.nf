@@ -329,6 +329,7 @@ process minimac_imputation{
     script:
     """
     minimac4 --refHaps chr${chromosome}.m3vcf.gz \
+    --rsid \
     --haps ${vcf} \
     --prefix chr${chromosome} \
     --format GT,DS,GP \
