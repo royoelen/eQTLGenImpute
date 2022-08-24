@@ -349,7 +349,7 @@ process filter_maf{
 
     script:
     """
-    bcftools filter ${vcf} -i 'MAF[0] > 0.01' -Oz -o chr${chromosome}.filtered.vcf.gz
+    bcftools +fill-tags -Ou ${vcf} -t AF,MAF | bcftools filter -i 'MAF[0] > 0.01' -Oz -o chr${chromosome}.filtered.vcf.gz
     """
 }
 
