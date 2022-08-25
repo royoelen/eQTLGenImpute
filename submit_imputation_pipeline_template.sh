@@ -23,19 +23,19 @@ module load squashfs/4.4
 nextflow_path=../../tools # folder where Nextflow executable is.
 reference_path=../hg38 # folder where you unpacked the reference files.
 
-cohortname=[name of your cohort]
-qc_input_folder=../../1_DataQC/output # folder with QCd genotype and expression data, output of DataQC pipeline.
+cohort_name=[name of your cohort]
+qc_input_folder=../../1_DataQC/output/postimpute/ # folder with QCd genotype and expression data, output of DataQC pipeline.
 output_path=../output/ # Output path.
 
 # Command
 NXF_VER=21.10.6 ${nextflow_path}/nextflow run eQTLGenImpute.nf \
 --qcdata ${qc_input_folder} \
---target_ref ${reference_path}/ref_genome_QC/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
---ref_panel_hg38 ${reference_path}/ref_panel_QC/30x-GRCh38_NoSamplesSorted \
---eagle_genetic_map ${reference_path}/phasing/genetic_map/genetic_map_hg38_withX.txt.gz \
---eagle_phasing_reference ${reference_path}/phasing/phasing_reference/ \
---minimac_imputation_reference ${reference_path}/imputation/ \
---cohort_name ${cohortname} \
+--target_ref ${reference_path}/genome_reference/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
+--ref_panel_hg38 ${reference_path}/harmonizing_reference/30x-GRCh38_NoSamplesSorted \
+--eagle_genetic_map ${reference_path}/phasing_reference/genetic_map/genetic_map_hg38_withX.txt.gz \
+--eagle_phasing_reference ${reference_path}/phasing_reference/phasing/ \
+--minimac_imputation_reference ${reference_path}/imputation_reference/ \
+--cohort_name ${cohort_name} \
 --outdir ${output_path}  \
 -profile slurm,singularity \
 -resume

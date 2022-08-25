@@ -29,8 +29,7 @@ def helpMessage() {
 
     Optional arguments:
       --chain_file                      Chain file to translate genomic coordinates from the source assembly to target assembly (e.g. hg19 --> hg38). hg19-->hg38 works by default.
-      --cohort_type                Optional flag to indicate if the target data originates from array or sequence data (array by default)
-      --cohort_build
+      --cohort_build                    The genome build to which the cohort is mapped (default is hg37, setting this to hg38 skips crossmapping)
 
     """.stripIndent()
 }
@@ -330,6 +329,7 @@ process minimac_imputation{
     script:
     """
     minimac4 --refHaps chr${chromosome}.m3vcf.gz \
+    --rsid \
     --haps ${vcf} \
     --prefix chr${chromosome} \
     --format GT,DS,GP \
@@ -349,7 +349,11 @@ process filter_maf{
 
     script:
     """
+<<<<<<< HEAD
     bcftools filter ${vcf} -i 'MAF[0] > 0.01' -Oz -o chr${chromosome}.filtered.vcf.gz
+=======
+    bcftools +fill-tags -Ou ${vcf} -t AF,MAF | bcftools filter -i 'MAF[0] > 0.01' -Oz -o chr${chromosome}.filtered.vcf.gz
+>>>>>>> 7b19d16020caaa59f6c74595490f2e2d5bfb729b
     """
 }
 

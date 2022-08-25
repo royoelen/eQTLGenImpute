@@ -30,7 +30,7 @@ Performs the following main steps:
 
 You can either clone it by using git (if available in HPC):
 
-`git clone TBA`
+`git clone https://github.com/eQTLGen/eQTLGenImpute.git`
 
 Or just download this from the gitlab/github download link and unzip.
 
