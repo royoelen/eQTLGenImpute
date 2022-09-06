@@ -29,7 +29,7 @@ def helpMessage() {
 
     Optional arguments:
       --chain_file                      Chain file to translate genomic coordinates from the source assembly to target assembly (e.g. hg19 --> hg38). hg19-->hg38 works by default.
-      --cohort_build
+      --cohort_build                    The genome build to which the cohort is mapped (default is hg37, setting this to hg38 skips crossmapping)
 
     """.stripIndent()
 }
@@ -287,7 +287,7 @@ process eagle_prephasing{
     file phasing_reference from phasing_ref_ch.collect()
 
     output:
-    tuple val(chromosome), file("chr${chromosome}.phased.vcf.gz"), file("chr${chromosome}.phased.vcf.gz.csi") into phased_vcf_cf
+    tuple val(chromosome), file("chr${chromosome}.phased.vcf.gz") into phased_vcf_cf
 
     script:
     """
