@@ -8,6 +8,7 @@ def helpMessage() {
     nextflow run eQTLGenImpute.nf \
     --qcdata CohortName_hg37_genotyped \
     --cohort_name CohortName_hg38_imputed \
+    --genome_build GRCh37 \
     --outdir CohortName \
     --target_ref Homo_sapiens.GRCh38.dna.primary_assembly.fa \
     --ref_panel_hg38 30x-GRCh38_NoSamplesSorted \
@@ -20,6 +21,7 @@ def helpMessage() {
     Mandatory arguments:
       --qcdata                          Path to the folder with input unimputed plink files (have to be in hg19).
       --cohort_name                     Prefix for the output files.
+
       --outdir                          The output directory where the results will be saved.
       --target_ref                      Reference genome fasta file for the target genome assembly (e.g. GRCh38).
       --ref_panel_hg38                  Reference panel used for strand fixing and GenotypeHarmonizer after LiftOver (GRCh38).
@@ -33,6 +35,9 @@ def helpMessage() {
 
     """.stripIndent()
 }
+
+// Define set of accepted genome builds:
+def genome_builds_accepted = ['hg19', 'GRCh37', 'hg38', 'GRCh38']
 
 // Define input channels
 Channel
@@ -72,9 +77,12 @@ Channel
     .into { target_ref_ch; target_ref_ch2 }
 
 params.chain_file="$baseDir/data/GRCh37_to_GRCh38.chain"
-params.cohort_build = "hg37"
 
-skip_crossmap = params.cohort_build == "hg38"
+if ((params.genome_build in genome_builds_accepted) == false) {
+  exit 1, "[Pipeline error] Genome build $params.genome_build not in accepted genome builds: $genome_builds_accepted \n"
+}
+
+skip_crossmap = params.genome_build in ["hg38", "GRCh38"]
 
 Channel
     .fromPath(params.chain_file)
@@ -89,7 +97,7 @@ def summary = [:]
 summary['Pipeline Name']            = 'eqtlgenimpute'
 summary['Pipeline Version']         = workflow.manifest.version
 summary['Path to QCd input']        = params.qcdata
-summary['Cohort build']             = params.cohort_build
+summary['Cohort build']             = params.genome_build
 summary['Skip crossmap']             = skip_crossmap
 summary['Harmonisation ref panel hg38']  = params.ref_panel_hg38
 summary['Target reference genome hg38'] = params.target_ref
