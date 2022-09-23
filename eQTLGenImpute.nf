@@ -245,7 +245,8 @@ process filter_preimpute_vcf{
     tuple val(chr), file(input_vcf) from fixed_to_filter_split
 
     output:
-    tuple val(chr), file("filtered.vcf.gz"), file("filtered.vcf.gz.csi") into split_vcf_input, missingness_input_split
+    tuple val(chr), file("filtered.vcf.gz"), file("filtered.vcf.gz.csi") into split_vcf_input
+    file("filtered.vcf.gz") into missingness_input_split
 
     script:
     """
@@ -274,7 +275,7 @@ process calculate_missingness{
         saveAs: {filename -> if (filename == "genotypes.imiss") "${params.cohort_name}.imiss" else null }
 
     input:
-    set val(chr), file(input_vcf), file(input_vcf_index) from missingness_input_split.collect()
+    file input_vcf from missingness_input_split.collect()
 
     output:
     file "genotypes.imiss" into missing_individuals
