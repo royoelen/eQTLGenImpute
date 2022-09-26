@@ -275,16 +275,16 @@ process calculate_missingness{
         saveAs: {filename -> if (filename == "genotypes.imiss") "${params.cohort_name}.imiss" else null }
 
     input:
-    file input_vcf from missingness_input_split.collect()
+    file 'filtered_??.vcf.gz' from missingness_input_split.collect()
 
     output:
     file "genotypes.imiss" into missing_individuals
 
     script:
     """
-    bcftools concat ${input_vcf} -Oz > concat.vcf.gz
+    bcftools concat filtered_??.vcf.gz -Oz > concat.vcf.gz
     bcftools index -f concat.vcf.gz
-    vcftools --gzvcf ${input_vcf} --missing-indv --out genotypes
+    vcftools --gzvcf concat.vcf.gz --missing-indv --out genotypes
     """
 }
 
