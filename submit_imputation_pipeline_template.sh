@@ -19,6 +19,11 @@ module load squashfs/4.4
 # some of the following paths are pre-filled.
 # https://github.com/eQTLGen/eQTLGen-phase-2-cookbook/wiki/eQTLGen-phase-II-cookbook
 
+# We set the following variables for nextflow to prevent writing to your home directory (and potentially filling it completely)
+# Feel free to change these as you wish.
+export SINGULARITY_CACHEDIR=../../singularitycache
+export NXF_HOME=../../nextflowcache
+
 # Define paths and arguments
 nextflow_path=../../tools # folder where Nextflow executable is.
 reference_path=../hg38 # folder where you unpacked the reference files.
@@ -26,6 +31,7 @@ reference_path=../hg38 # folder where you unpacked the reference files.
 cohort_name=[name of your cohort]
 qc_input_folder=../../1_DataQC/output/postimpute/ # folder with QCd genotype and expression data, output of DataQC pipeline.
 output_path=../output/ # Output path.
+genome_build="GRCh37"
 
 # Command
 NXF_VER=21.10.6 ${nextflow_path}/nextflow run eQTLGenImpute.nf \
@@ -36,6 +42,7 @@ NXF_VER=21.10.6 ${nextflow_path}/nextflow run eQTLGenImpute.nf \
 --eagle_phasing_reference ${reference_path}/phasing_reference/phasing/ \
 --minimac_imputation_reference ${reference_path}/imputation_reference/ \
 --cohort_name ${cohort_name} \
+--genome_build ${genome_build} \
 --outdir ${output_path}  \
 -profile slurm,singularity \
 -resume

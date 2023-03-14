@@ -8,6 +8,7 @@ def helpMessage() {
     nextflow run eQTLGenImpute.nf \
     --qcdata CohortName_hg37_genotyped \
     --cohort_name CohortName_hg38_imputed \
+    --genome_build GRCh37 \
     --outdir CohortName \
     --target_ref Homo_sapiens.GRCh38.dna.primary_assembly.fa \
     --ref_panel_hg38 30x-GRCh38_NoSamplesSorted \
@@ -20,6 +21,7 @@ def helpMessage() {
     Mandatory arguments:
       --qcdata                          Path to the folder with input unimputed plink files (have to be in hg19).
       --cohort_name                     Prefix for the output files.
+
       --outdir                          The output directory where the results will be saved.
       --target_ref                      Reference genome fasta file for the target genome assembly (e.g. GRCh38).
       --ref_panel_hg38                  Reference panel used for strand fixing and GenotypeHarmonizer after LiftOver (GRCh38).
@@ -29,14 +31,19 @@ def helpMessage() {
 
     Optional arguments:
       --chain_file                      Chain file to translate genomic coordinates from the source assembly to target assembly (e.g. hg19 --> hg38). hg19-->hg38 works by default.
+      --cohort_build                    The genome build to which the cohort is mapped (default is hg37, setting this to hg38 skips crossmapping)
 
     """.stripIndent()
 }
+
+// Define set of accepted genome builds:
+def genome_builds_accepted = ['hg19', 'GRCh37', 'hg38', 'GRCh38']
 
 // Define input channels
 Channel
     .fromFilePairs("${params.qcdata}/outputfolder_gen/gen_data_QCd/*.{bed,bim,fam}", size: -1)
     .ifEmpty {exit 1, "Input genotype files not found!"}
+    .map { it.flatten() }
     .set { bfile_ch }
 
 Channel
@@ -61,19 +68,25 @@ Channel
 
 Channel
     .fromPath(params.eagle_genetic_map)
-    .ifEmpty { exit 1, "Eagle genetic map file not found: ${params.eagle_genetic_map}" } 
+    .ifEmpty { exit 1, "Eagle genetic map file not found: ${params.eagle_genetic_map}" }
     .set { genetic_map_ch }
 
 Channel
     .fromPath(params.target_ref)
-    .ifEmpty { exit 1, "Target reference genome file not found: ${params.target_ref}" } 
+    .ifEmpty { exit 1, "Target reference genome file not found: ${params.target_ref}" }
     .into { target_ref_ch; target_ref_ch2 }
 
 params.chain_file="$baseDir/data/GRCh37_to_GRCh38.chain"
 
+if ((params.genome_build in genome_builds_accepted) == false) {
+  exit 1, "[Pipeline error] Genome build $params.genome_build not in accepted genome builds: $genome_builds_accepted \n"
+}
+
+skip_crossmap = params.genome_build in ["hg38", "GRCh38"]
+
 Channel
     .fromPath(params.chain_file)
-    .ifEmpty { exit 1, "CrossMap.py chain file not found: ${params.chain_file}" } 
+    .ifEmpty { exit 1, "CrossMap.py chain file not found: ${params.chain_file}" }
     .set { chain_file_ch }
 
 // Header log info
@@ -84,6 +97,8 @@ def summary = [:]
 summary['Pipeline Name']            = 'eqtlgenimpute'
 summary['Pipeline Version']         = workflow.manifest.version
 summary['Path to QCd input']        = params.qcdata
+summary['Cohort build']             = params.genome_build
+summary['Skip crossmap']             = skip_crossmap
 summary['Harmonisation ref panel hg38']  = params.ref_panel_hg38
 summary['Target reference genome hg38'] = params.target_ref
 summary['CrossMap chain file']      = params.chain_file
@@ -110,15 +125,18 @@ log.info "========================================="
 process crossmap{
 
     input:
-    set val(study_name), file(study_name_bed), file(study_name_bim), file(study_name_fam) from bfile_ch
+    set val(study_name), file(study_name_bed), file(study_name_bim), file(study_name_fam) from ( skip_crossmap ? Channel.empty() : bfile_ch)
     file chain_file from chain_file_ch.collect()
- 
-    output:
-    tuple file("crossmapped_plink.bed"), file("crossmapped_plink.bim"), file("crossmapped_plink.fam") into crossmapped
 
-    shell: 
-    //Converts BIM to BED and converts the BED file via CrossMap. 
-    //Finds excluded SNPs and removes them from the original plink file. 
+    output:
+    set val(study_name), file("crossmapped_plink.bed"), file("crossmapped_plink.bim"), file("crossmapped_plink.fam") into crossmapped
+
+    when:
+    skip_crossmap == false
+
+    shell:
+    //Converts BIM to BED and converts the BED file via CrossMap.
+    //Finds excluded SNPs and removes them from the original plink file.
     //Then replaces the BIM with CrossMap's output.
     """
     awk '{print \$1,\$4,\$4+1,\$2,\$5,\$6,\$2 "___" \$5 "___" \$6}' ${study_name}.bim > crossmap_input.bed
@@ -134,25 +152,43 @@ process crossmap{
 process sort_bed{
 
     input:
-    tuple file(study_name_bed), file(study_name_bim), file(study_name_fam) from crossmapped
+    set val(study_name), file(study_name_bed), file(study_name_bim), file(study_name_fam) from ( skip_crossmap ? bfile_ch : crossmapped)
 
     output:
     tuple file("sorted.bed"), file("sorted.bim"), file("sorted.fam") into sorted_genotypes_hg38_ch
-    
+
     script:
     """
     plink2 --bfile ${study_name_bed.simpleName} --make-bed --output-chr MT --out sorted
     """
 }
 
-process harmonize_hg38{
+process split_by_chr{
+
+    publishDir "${params.outdir}/preimpute/split_chr", mode: 'copy',
+        saveAs: {filename -> if (filename.indexOf(".vcf.gz") > 0) filename else null }
 
     input:
     tuple file(study_name_bed), file(study_name_bim), file(study_name_fam) from sorted_genotypes_hg38_ch
+    each chr from Channel.from(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22)
+
+    output:
+    tuple val(chr), path("chr_${chr}_sorted.bed"), path("chr_${chr}_sorted.bim"), path("chr_${chr}_sorted.fam") into sorted_split_genotypes_hg38_ch
+
+    script:
+    """
+    plink2 --bfile ${study_name_bed.baseName} --chr ${chr} --make-bed --out chr_${chr}_sorted
+    """
+}
+
+process harmonize_hg38{
+
+    input:
+    tuple val(chr), path(study_name_bed), path(study_name_bim), path(study_name_fam) from sorted_split_genotypes_hg38_ch
     tuple file(vcf_file), file(vcf_file_index) from ref_panel_harmonise_genotypes_hg38.collect()
 
     output:
-    tuple file("harmonised.bed"), file("harmonised.bim"), file("harmonised.fam") into harmonised_genotypes_hg38_ch
+    tuple val(chr), file("harmonised.bed"), file("harmonised.bim"), file("harmonised.fam") into harmonised_split_genotypes_hg38_ch
 
     script:
     """
@@ -169,34 +205,34 @@ process harmonize_hg38{
 process plink_to_vcf{
 
     input:
-    set file(study_name_bed), file(study_name_bim), file(study_name_fam) from harmonised_genotypes_hg38_ch
+    set val(chr), file(study_name_bed), file(study_name_bim), file(study_name_fam) from harmonised_split_genotypes_hg38_ch
 
     output:
-    file "harmonised_hg38.vcf" into harmonized_hg38_vcf_ch
+    tuple val(chr), file("chr{chr}_harmonised_hg38.vcf") into harmonized_split_hg38_vcf_ch
 
     script:
     """
-    plink2 --bfile ${study_name_bed.simpleName} --recode vcf-iid --chr 1-22 --out harmonised_hg38
+    plink2 --bfile ${study_name_bed.simpleName} --recode vcf-iid --chr 1-22 --out chr{chr}_harmonised_hg38
     """
 }
 
 process vcf_fixref_hg38{
 
     input:
-    file input_vcf from harmonized_hg38_vcf_ch
+    tuple val(chr), file(input_vcf) from harmonized_split_hg38_vcf_ch
     file fasta from target_ref_ch2.collect()
-    set file(vcf_file), file(vcf_file_index) from ref_panel_fixref_genotypes_hg38
+    set file(vcf_file), file(vcf_file_index) from ref_panel_fixref_genotypes_hg38.collect()
 
     output:
-    file "fixref_hg38.vcf.gz" into fixed_to_filter
+    tuple val(chr), file("chr{chr}_fixref_hg38.vcf.gz") into fixed_to_filter_split
 
     script:
     """
-    bgzip ${input_vcf}
+    bgzip -c ${input_vcf} > ${input_vcf}.gz
     bcftools index ${input_vcf}.gz
-    
+
     bcftools +fixref ${input_vcf}.gz -- -f ${fasta} -i ${vcf_file} | \
-    bcftools norm --check-ref x -f ${fasta} -Oz -o fixref_hg38.vcf.gz
+    bcftools norm --check-ref x -f ${fasta} -Oz -o chr{chr}_fixref_hg38.vcf.gz
     """
 }
 
@@ -206,10 +242,11 @@ process filter_preimpute_vcf{
         saveAs: {filename -> if (filename == "filtered.vcf.gz") "${params.cohort_name}_preimpute.vcf.gz" else null }
 
     input:
-    file input_vcf from fixed_to_filter
+    tuple val(chr), file(input_vcf) from fixed_to_filter_split
 
     output:
-    set file("filtered.vcf.gz"), file("filtered.vcf.gz.csi") into split_vcf_input, missingness_input
+    tuple val(chr), file("filtered.vcf.gz"), file("filtered.vcf.gz.csi") into split_vcf_input
+    file("filtered.vcf.gz") into missingness_input_split
 
     script:
     """
@@ -227,8 +264,8 @@ process filter_preimpute_vcf{
      bcftools norm -m+any |\
      bcftools view -m2 -M2 -Oz -o filtered.vcf.gz
 
-     #Index the output file
-     bcftools index filtered.vcf.gz
+    #Index the output file
+    bcftools index filtered.vcf.gz
     """
 }
 
@@ -236,50 +273,33 @@ process calculate_missingness{
 
     publishDir "${params.outdir}/preimpute/", mode: 'copy',
         saveAs: {filename -> if (filename == "genotypes.imiss") "${params.cohort_name}.imiss" else null }
-    
+
     input:
-    set file(input_vcf), file(input_vcf_index) from missingness_input 
+    file 'filtered_??.vcf.gz' from missingness_input_split.collect()
 
     output:
     file "genotypes.imiss" into missing_individuals
 
     script:
     """
-    vcftools --gzvcf ${input_vcf} --missing-indv --out genotypes
+    bcftools concat filtered_??.vcf.gz -Oz > concat.vcf.gz
+    bcftools index -f concat.vcf.gz
+    vcftools --gzvcf concat.vcf.gz --missing-indv --out genotypes
     """
 }
 
-process split_by_chr{
-
-    publishDir "${params.outdir}/preimpute/split_chr", mode: 'copy',
-        saveAs: {filename -> if (filename.indexOf(".vcf.gz") > 0) filename else null }
-    
-    input:
-    tuple file(input_vcf), file(input_vcf_index) from split_vcf_input
-    each chr from Channel.from(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22)
-
-    output:
-    tuple val(chr), file("chr_${chr}.vcf.gz") into individual_chromosomes
-
-    script:
-    """
-    bcftools view -r ${chr} ${input_vcf} -Oz -o chr_${chr}.vcf.gz
-    """
-}
- 
 process eagle_prephasing{
 
     input:
-    tuple chromosome, file(vcf) from individual_chromosomes
+    tuple val(chromosome), file(vcf), file(vcf_index) from split_vcf_input
     file genetic_map from genetic_map_ch.collect()
     file phasing_reference from phasing_ref_ch.collect()
 
     output:
-    tuple chromosome, file("chr${chromosome}.phased.vcf.gz") into phased_vcf_cf
+    tuple val(chromosome), file("chr${chromosome}.phased.vcf.gz") into phased_vcf_cf
 
     script:
     """
-    bcftools index -f ${vcf}
     eagle --vcfTarget=${vcf} \
     --vcfRef=chr${chromosome}.bcf \
     --geneticMapFile=${genetic_map} \
@@ -292,12 +312,12 @@ process eagle_prephasing{
 phased_vcf_cf2 = phased_vcf_cf.combine(exp_mat_ch)
 
 process filter_samples{
-    
+
     input:
-    set chromosome, file(vcf), file(exp_mat) from phased_vcf_cf2
+    set val(chromosome), file(vcf), file(exp_mat) from phased_vcf_cf2
 
     output:
-    tuple chromosome, file("chr${chromosome}.phased.samplesfiltered.vcf.gz") into phased_vcf_samplefiltered_cf
+    tuple val(chromosome), file("chr${chromosome}.phased.samplesfiltered.vcf.gz") into phased_vcf_samples_filtered_cf
 
     script:
     """
@@ -306,21 +326,20 @@ process filter_samples{
     """
 }
 
-
 process minimac_imputation{
- 
+
     input:
-    set chromosome, file(vcf) from phased_vcf_samplefiltered_cf
+    set val(chromosome), file(vcf) from phased_vcf_samples_filtered_cf
     file imputation_reference from imputation_ref_ch.collect()
 
     output:
-    tuple chromosome, file("chr${chromosome}.dose.vcf.gz") into imputed_vcf_cf
+    tuple val(chromosome), file("chr${chromosome}.dose.vcf.gz") into imputed_vcf_cf
 
     script:
     """
     minimac4 --refHaps chr${chromosome}.m3vcf.gz \
-    --haps ${vcf} \
     --rsid \
+    --haps ${vcf} \
     --prefix chr${chromosome} \
     --format GT,DS,GP \
     --noPhoneHome
@@ -328,7 +347,7 @@ process minimac_imputation{
 }
 
 process filter_maf{
-    
+
     publishDir "${params.outdir}/postimpute/", mode: 'copy', pattern: "*.filtered.vcf.gz", overwrite: true
 
     input:
@@ -339,7 +358,8 @@ process filter_maf{
 
     script:
     """
-    bcftools filter ${vcf} -i 'MAF[0] > 0.01' -Oz -o chr${chromosome}.filtered.vcf.gz 
+    bcftools +fill-tags ${vcf} -Ou -- -t AF,MAF \
+    | bcftools filter -i 'INFO/MAF[0] > 0.01' -Oz -o chr${chromosome}.filtered.vcf.gz
     """
 }
 
