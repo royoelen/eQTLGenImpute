@@ -13,7 +13,7 @@ ENV PATH /opt/conda/envs/eqtlgen-imputation/bin:$PATH
 # RUN conda env export --name eqtlgen-imputation > eqtlgen-imputation.yml
 
 #Copy other binary dependencies
-RUN apt-get clean && apt-get update && apt-get install -y libgomp1
+RUN apt-get clean && apt-get update && apt-get install -y libgomp1 gawk
 COPY bin/eagle /usr/bin/
 COPY bin/minimac4 /usr/bin/
 COPY bin/GenotypeHarmonizer-1.4.23/ /usr/bin/
