@@ -398,9 +398,9 @@ process maf_combine{
 maf_check_ch = target_af.collect().combine(ref_af)
 
 process compare_MAF{
+    container = 'quay.io/eqtlgen/popassign:v0.6'
 
     publishDir "${params.outdir}/postimpute_QC/", mode: 'copy', pattern: "*.html", overwrite: true
-
 
     input:
     path "*_AF.txt"
