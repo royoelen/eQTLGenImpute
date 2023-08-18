@@ -54,7 +54,7 @@ Channel
 Channel
     .fromPath(params.ref_panel_hg38)
     .map { ref -> [file("${ref}.vcf.gz"), file("${ref}.vcf.gz.tbi")] }
-    .into { ref_panel_harmonise_genotypes_hg38; ref_panel_fixref_genotypes_hg38 }
+    .into { ref_panel_harmonise_genotypes_hg38; ref_panel_fixref_genotypes_hg38; ref_panel_maf }
 
 Channel
     .fromPath( "${params.eagle_phasing_reference}*" )
@@ -362,6 +362,61 @@ process filter_maf{
     | bcftools filter -i 'INFO/MAF[0] > 0.01' -Oz -o chr${chromosome}.filtered.vcf.gz
     """
 }
+
+process extract_maf_ref{
+
+    input:
+    file(ref_panel) from ref_panel_maf
+
+    output:
+    file("ref_allele_frequencies.txt") into ref_af
+
+    script:
+    """
+    bcftools \
+    query -f '%ID\t%CHROM\t%POS\t%REF\t%ALT\t%AF\t%AF_EUR\n' \
+    ${ref_panel} > ref_allele_frequencies.txt
+    """
+}
+
+process maf_combine{
+
+    input:
+    set val(chromosome), file(vcf), file(ref_panel) from imputed_vcf_filtered_cf
+
+    output:
+    file("*_AF.txt") into target_af
+
+    script:
+    """
+    bcftools \
+    query -f '%ID\t%CHROM\t%POS\t%REF\t%ALT\t%AF\t%AF_EUR\n' \
+    ${vcf} > ${chromosome}_AF.txt
+    """
+}
+
+maf_check_ch = target_af.collect().combine(ref_af)
+
+process compare_MAF{
+
+    publishDir "${params.outdir}/postimpute_QC/", mode: 'copy', pattern: "*.html", overwrite: true
+
+
+    input:
+    path "*_AF.txt"
+    file("ref_allele_frequencies.txt") into ref  
+
+    script:
+    """
+    # Make report
+    cp -L $baseDir/bin/Report_template.Rmd notebook.Rmd
+
+    R -e 'library(rmarkdown);rmarkdown::render("notebook.Rmd", "html_document", 
+    output_file = "Report_ImputationQc.html")'
+    """
+
+}
+
 
 workflow.onComplete {
     println ( workflow.success ? "Pipeline finished!" : "Something crashed...debug!" )
