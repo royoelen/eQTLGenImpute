@@ -366,20 +366,20 @@ process filter_maf{
 process extract_maf_ref{
 
     input:
-    file(ref_panel) from ref_panel_maf
-
+    tuple file(vcf_file), file(vcf_file_index) from ref_panel_maf.collect()
+    
     output:
     file("ref_allele_frequencies.txt") into ref_af
 
     script:
     """
     bcftools \
-    query -f '%ID\t%CHROM\t%POS\t%REF\t%ALT\t%AF\t%AF_EUR\n' \
-    ${ref_panel} > ref_allele_frequencies.txt
+    query -f '%ID\\t%CHROM\\t%POS\\t%REF\\t%ALT\\t%AF\\t%AF_EUR\\n' \
+    ${vcf_file} > ref_allele_frequencies.txt
     """
 }
 
-process maf_combine{
+process extract_maf_target{
 
     input:
     set val(chromosome), file(vcf), file(ref_panel) from imputed_vcf_filtered_cf
@@ -390,7 +390,7 @@ process maf_combine{
     script:
     """
     bcftools \
-    query -f '%ID\t%CHROM\t%POS\t%REF\t%ALT\t%AF\t%AF_EUR\n' \
+    query -f '%ID\\t%CHROM\\t%POS\\t%REF\\t%ALT\\t%AF\\t%AF_EUR\\n' \
     ${vcf} > ${chromosome}_AF.txt
     """
 }
@@ -398,13 +398,11 @@ process maf_combine{
 maf_check_ch = target_af.collect().combine(ref_af)
 
 process compare_MAF{
-    container = 'quay.io/eqtlgen/popassign:v0.6'
 
     publishDir "${params.outdir}/postimpute_QC/", mode: 'copy', pattern: "*.html", overwrite: true
 
     input:
-    path "*_AF.txt"
-    file("ref_allele_frequencies.txt") into ref  
+    set file("*_AF.txt"), file("ref_allele_frequencies.txt") from maf_check_ch
 
     script:
     """
@@ -416,7 +414,6 @@ process compare_MAF{
     """
 
 }
-
 
 workflow.onComplete {
     println ( workflow.success ? "Pipeline finished!" : "Something crashed...debug!" )

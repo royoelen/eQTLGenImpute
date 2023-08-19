@@ -15,4 +15,15 @@ Here we compare the allele frequencies of imputed dataset to the EUR allele freq
 library(data.table)
 # read in reference dataset AFs
 # read in all AFs for target dataset
+
+target_af <- fread(list.files(pattern = "_AF.txt")[1])
+for (inp_file in list.files(pattern = "_AF.txt")[-1]){
+
+    temp_af <- fread(inp_file)
+    target_af <- rbind(target_af, temp_af)
+
+}
+
+print(nrow(target_af))
+
 ```
