@@ -390,7 +390,7 @@ process extract_maf_target{
     script:
     """
     bcftools \
-    query -f '%ID\\t%CHROM\\t%POS\\t%REF\\t%ALT\\t%AF\\t%AF_EUR\\n' \
+    query -f '%ID\\t%CHROM\\t%POS\\t%REF\\t%ALT\\t%AF\\n' \
     ${vcf} > ${chromosome}_AF.txt
     """
 }
