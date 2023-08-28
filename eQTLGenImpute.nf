@@ -382,7 +382,7 @@ process extract_maf_ref{
 process extract_maf_target{
 
     input:
-    set val(chromosome), file(vcf), file(ref_panel) from imputed_vcf_filtered_cf
+    set val(chromosome), file(vcf) from imputed_vcf_filtered_cf
 
     output:
     file("*_AF.txt") into target_af
@@ -390,7 +390,7 @@ process extract_maf_target{
     script:
     """
     bcftools \
-    query -f '%ID\\t%CHROM\\t%POS\\t%REF\\t%ALT\\t%AF\\n' \
+    query -f '%ID\\t%CHROM\\t%POS\\t%REF\\t%ALT\\t%AF\\t%IMPUTED\\t%TYPED\\t%R2\\n' \
     ${vcf} > ${chromosome}_AF.txt
     """
 }
@@ -401,10 +401,13 @@ process compare_MAF{
 
     container = "quay.io/eqtlgen/popassign:v0.6"
 
-    publishDir "${params.outdir}/postimpute_QC/", mode: 'copy', pattern: "*.html", overwrite: true
+    publishDir "${params.outdir}/", mode: 'copy', pattern: "*.html", overwrite: true
 
     input:
-    set file("*_AF.txt"), file("ref_allele_frequencies.txt") from maf_check_ch
+    path files from maf_check_ch
+
+    output:
+    path "Report_ImputationQc.html" into report_output_ch
 
     script:
     """
