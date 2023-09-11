@@ -19,7 +19,7 @@ def helpMessage() {
     -resume
 
     Mandatory arguments:
-      --qcdata                          Path to the folder with input unimputed plink files (have to be in hg19).
+      --qcdata                          Path to the folder with input unimputed plink files.
       --cohort_name                     Prefix for the output files.
 
       --outdir                          The output directory where the results will be saved.
@@ -30,14 +30,14 @@ def helpMessage() {
       --minimac_imputation_reference    Imputation reference panel for Minimac4 in M3VCF format (1000 Genomes 30x WGS high coverage).
 
     Optional arguments:
-      --chain_file                      Chain file to translate genomic coordinates from the source assembly to target assembly (e.g. hg19 --> hg38). hg19-->hg38 works by default.
-      --cohort_build                    The genome build to which the cohort is mapped (default is hg37, setting this to hg38 skips crossmapping)
+      --chain_file                      Chain file to translate genomic coordinates from the source assembly to target assembly (e.g. hg19 --> hg38). hg19-->hg38 & hg18-->hg38 works by default.
+      --cohort_build                    The genome build to which the cohort is mapped: hg18, GRCh36, hg19, GRCh37, hg38 or GRCh38 (default is hg37, setting this to hg38 skips crossmapping)
 
     """.stripIndent()
 }
 
 // Define set of accepted genome builds:
-def genome_builds_accepted = ['hg19', 'GRCh37', 'hg38', 'GRCh38']
+def genome_builds_accepted = ['hg18', 'GRCh36', 'hg19', 'GRCh37', 'hg38', 'GRCh38']
 
 // Define input channels
 Channel
@@ -76,10 +76,13 @@ Channel
     .ifEmpty { exit 1, "Target reference genome file not found: ${params.target_ref}" }
     .into { target_ref_ch; target_ref_ch2 }
 
-params.chain_file="$baseDir/data/GRCh37_to_GRCh38.chain"
-
 if ((params.genome_build in genome_builds_accepted) == false) {
   exit 1, "[Pipeline error] Genome build $params.genome_build not in accepted genome builds: $genome_builds_accepted \n"
+}
+
+params.chain_file="$baseDir/data/GRCh37_to_GRCh38.chain"
+if (params.genome_build in ["hg18", "GRCh36"]) {
+    params.chain_file="$baseDir/data/hg18ToHg38.over.chain"
 }
 
 skip_crossmap = params.genome_build in ["hg38", "GRCh38"]
@@ -144,7 +147,7 @@ process crossmap{
     awk '{print \$7}' crossmap_input.bed | sort > input_ids.txt
     awk '{print \$7}' crossmap_output.bed | sort > output_ids.txt
     comm -23 input_ids.txt output_ids.txt | awk '{split(\$0,a,"___"); print a[1]}' > excluded_ids.txt
-    plink2 --bfile ${study_name} --exclude excluded_ids.txt --make-bed --output-chr MT --out crossmapped_plink
+    plink2 --bfile ${study_name} --exclude excluded_ids.txt --make-bed --output-chr MT --out crossmapped_plink --keep-allele-order
     awk -F'\t' 'BEGIN {OFS=FS} {print \$1,\$4,0,\$2,\$5,\$6}' crossmap_output.bed > crossmapped_plink.bim
     """
 }
