@@ -1,0 +1,76 @@
+---
+title: "Imputation QC report"
+date: "`r format(Sys.time(), '%d/%m/%y')`"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+---
+
+## QC of imputed data
+
+Here we compare the allele frequencies of imputed dataset to the EUR allele frequencies as reported in reference dataset.
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE, fig.width = 6, fig.height = 6, fig.align = "center"}
+library(data.table)
+library(ggplot2)
+setDTthreads(8)
+
+# read in reference dataset AFs
+ref <- fread("ref_allele_frequencies.txt")
+colnames(ref) <- c("ID", "CHR", "POS", "REF", "ALT", "AF_ALL", "AF_EUR")
+message("Reference variants read")
+# read in all AFs for target dataset
+target <- fread("1_AF.txt")
+for (i in 2:22){
+
+  target_temp <- fread(paste0(i, "_AF.txt"))
+  target <- rbind(target, target_temp)
+  message(paste("Target", i, "chr read"))
+}
+
+colnames(target) <- c("ID", "CHR", "POS", "REF", "ALT", "AF", "IMPUTED", "TYPED", "R2")
+message("Target variants read")
+setkey(target, "ID")
+message("Target keys")
+ref <- ref[ID %in% target$ID]
+setkey(ref, "ID")
+message("Reference filtered, keys set")
+
+ref <- ref[, c(1, 6, 7), with = FALSE]
+target <- target[, c(1, 6, 7:9), with = FALSE]
+
+comb <- merge(ref, target)
+
+message("Data merged")
+
+cor_MAF_EUR <- cor(comb$AF, comb$AF_EUR)
+cor_MAF_EUR_q <- cor(comb[R2 > 0.4 & (AF > 0.01 & AF < 0.99)]$AF, comb[R2 > 0.4 & (AF > 0.01 & AF < 0.99)]$AF_EUR)
+message("EUR cor calculated")
+cor_MAF_ALL <- cor(comb$AF, comb$AF_ALL)
+cor_MAF_ALL_q <- cor(comb[R2 > 0.4 & (AF > 0.01 & AF < 0.99)]$AF, comb[R2 > 0.4 & (AF > 0.01 & AF < 0.99)]$AF_ALL)
+message("ALL cor calculated")
+
+```
+
+- There are `r nrow(comb)` variants in the comparison (MAF>0.01), `r nrow(comb[TYPED == 1])` are typed, `r nrow(comb[IMPUTED == 1])` are imputed.
+- Out of all compared variants, `r nrow(comb[R2 > 0.4 & (AF > 0.01 & AF < 0.99)])` have Mach R^2^>0.4 and MAF>0.01.
+- Pearson R between the ALT allele frequencies between reference ALL and target datasets is `r cor_MAF_ALL`, with reference EUR it is `r cor_MAF_EUR`.
+- When confining to Mach R^2^>0.4 and MAF>0.01, Pearson R between the ALT allele frequencies between reference ALL and target datasets is `r cor_MAF_ALL_q`, with reference EUR subset it is `r cor_MAF_EUR_q`.
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE, fig.width = 6, fig.height = 6, fig.align = "center"}
+ggplot(comb[R2 > 0.4 & (AF > 0.01 & AF < 0.99)], aes(x = AF, y = AF_ALL)) + geom_point(size = 0.3, alpha = 0.2) + theme_bw() + scale_y_continuous(limits = c(0, 1)) + scale_x_continuous(limits = c(0, 1)) + xlab("AF (imputed data)") + ylab("AF (1000G ALL reference)")
+```
+**Fig 1. Comparison of allele frequencies between imputed genotypes and 1000G phase 3 reference (Mach R^2^>0.4 and MAF>0.01).** 
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE, fig.width = 6, fig.height = 6, fig.align = "center"}
+
+comb_f1 <- comb[AF > 0.01 & AF < 0.99]
+suspicious <- nrow(comb_f1[((AF_ALL > 0.5 & AF < 0.5) | (AF_ALL < 0.5 & AF > 0.5)) & abs(AF - AF_ALL) > 0.1])
+
+comb_f2 <- comb[R2 > 0.4 & (AF > 0.01 & AF < 0.99)]
+very_supicious <- nrow(comb_f2[(AF_ALL > 0.8 & AF < 0.2) | (AF_ALL < 0.2 & AF > 0.8)])
+```
+There are `r suspicious` (`r round((suspicious/nrow(comb_f1)) * 100, digits = 3)`%) suspicious variants (AF difference from from 1000G ALL > 0.1; target AF >0.5 & ref AF <0.5 or vice versa).
+
+There are `r very_supicious` (`r round((very_supicious/nrow(comb_f2)) * 100, digits = 3)`%) very suspicious variants (Mach R^2^>0.4; target AF >0.8 and reference AF <0.2 or vice versa).
