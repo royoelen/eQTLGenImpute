@@ -408,6 +408,7 @@ process compare_MAF{
 
     input:
     path files from maf_check_ch
+    val workflow_version from workflow.manifest.version
 
     output:
     path "Report_ImputationQc.html" into report_output_ch
@@ -418,7 +419,7 @@ process compare_MAF{
     cp -L $baseDir/bin/Report_template.Rmd notebook.Rmd
 
     R -e 'library(rmarkdown);rmarkdown::render("notebook.Rmd", "html_document", 
-    output_file = "Report_ImputationQc.html")'
+    output_file = "Report_ImputationQc.html", params=list(workflow_version = "${workflow_version}"))'
     """
 
 }

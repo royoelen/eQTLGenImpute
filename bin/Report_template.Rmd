@@ -5,9 +5,13 @@ output:
   html_document:
     code_folding: hide
     toc: true
+params:
+  workflow_version: "NULL"
 ---
 
 ## QC of imputed data
+
+*workflow version: `r params$workflow_version`*
 
 Here we compare the allele frequencies of imputed dataset to the EUR allele frequencies as reported in reference dataset.
 
