@@ -82,14 +82,16 @@ if ((params.genome_build in genome_builds_accepted) == false) {
 
 params.chain_file="$baseDir/data/GRCh37_to_GRCh38.chain"
 if (params.genome_build in ["hg18", "GRCh36"]) {
-    params.chain_file="$baseDir/data/hg18ToHg38.over.chain"
+    chain_file="$baseDir/data/hg18ToHg38.over.chain"
+} else {
+    chain_file=params.chain_file
 }
 
 skip_crossmap = params.genome_build in ["hg38", "GRCh38"]
 
 Channel
-    .fromPath(params.chain_file)
-    .ifEmpty { exit 1, "CrossMap.py chain file not found: ${params.chain_file}" }
+    .fromPath(chain_file)
+    .ifEmpty { exit 1, "CrossMap.py chain file not found: ${chain_file}" }
     .set { chain_file_ch }
 
 // Header log info
@@ -101,6 +103,7 @@ summary['Pipeline Name']            = 'eqtlgenimpute'
 summary['Pipeline Version']         = workflow.manifest.version
 summary['Path to QCd input']        = params.qcdata
 summary['Cohort build']             = params.genome_build
+summary['Chain file']             = chain_file
 summary['Skip crossmap']             = skip_crossmap
 summary['Harmonisation ref panel hg38']  = params.ref_panel_hg38
 summary['Target reference genome hg38'] = params.target_ref
