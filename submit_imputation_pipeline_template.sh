@@ -31,7 +31,7 @@ reference_path=../hg38 # folder where you unpacked the reference files.
 cohort_name=[name of your cohort]
 qc_input_folder=../../1_DataQC/output/ # folder with QCd genotype and expression data, output of DataQC pipeline.
 output_path=../output/ # Output path.
-genome_build="GRCh37"
+genome_build="GRCh37" # Adjust if your genotype data is in different genotype build. Options: hg18 or GRCh36, hg19 or GRCh37, hg38 or GRCh38 
 
 # Command
 NXF_VER=21.10.6 ${nextflow_path}/nextflow run eQTLGenImpute.nf \
