@@ -331,10 +331,10 @@ process filter_samples{
     # get the unique samples
     cat sample_filter_wdups.txt | sort | uniq > sample_filter.txt
     # warn if there are less lines in the non-duplicated one, which would indicate that we have duplicate sample names in there
-    nlines_dedup=$(< "sample_filter.txt" wc -l)
-    nlines_dup=$(< "sample_filter_wdups.txt" wc -l)
+    nlines_dedup=\$(< "sample_filter.txt" wc -l)
+    nlines_dup=\$(< "sample_filter_wdups.txt" wc -l)
     if [ "\${nlines_dup}" -gt "\${nlines_dedup}" ]; then
-        echo "deduplicated genotype sample list smaller than genotype-to-expression sample list, duplicated genotype samples in genotype-to-expression file"
+        echo "WARNING: deduplicated genotype sample list smaller than genotype-to-expression sample list, duplicated genotype samples in genotype-to-expression file"
     fi
     bcftools view -S sample_filter.txt --force-samples ${vcf} -Oz -o chr${chromosome}.phased.samplesfiltered.vcf.gz
     """
